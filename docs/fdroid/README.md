@@ -19,6 +19,9 @@ and can update each other.
 - **build-tools 35.0.0**, with `apksigner --alignment-preserved`: without it apksigner re-aligns the
   archive while signing and the signature no longer fits a rebuild.
 - The recipe does not pin `JAVA_HOME`; `scripts/env.sh` finds `javac` on `PATH`.
+- `scripts/build.sh` and `scripts/add-to-zip.py` must stay executable **in git** (mode 100755). This
+  repository has `core.fileMode=false`, so check with `git ls-files -s scripts/`; a filesystem that
+  makes every file executable hides a missing bit until F-Droid's server says "Permission denied".
 - Check a release before publishing it: build `--unsigned` from a fresh clone of the tag and run
   `apksigcopier compare reteget-<v>.apk --unsigned reteget-<v>-unsigned.apk`.
 

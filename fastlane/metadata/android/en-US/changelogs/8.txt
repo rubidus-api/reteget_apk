@@ -1,0 +1,1 @@
+A packaging fix, with no change to the app: the build scripts are now marked executable in the repository, which F-Droid's build server needs. The application id is still com.reteget, as introduced in 0.3.4.
