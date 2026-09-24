@@ -37,8 +37,7 @@
     <string name="btn_move_up">↑</string>
     <string name="btn_move_down">↓</string>
     <string name="btn_delete">Delete</string>
-    <string name="chk_select_all">Select all</string>
-    <string name="btn_delete_selected">Delete Selected (%1$d)</string>
+    <string name="btn_delete_selected">Delete selected (%1$d)</string>
     <string name="dialog_edit_preset_title">Edit name and URL</string>
     <string name="dialog_edit_preset_name_label">Name:</string>
     <string name="dialog_edit_preset_name_hint">Preset name (e.g. ReteGet)</string>
@@ -90,6 +89,7 @@
     <string name="btn_paste">Paste</string>
     <string name="btn_clear_url">Clear</string>
     <string name="toast_clipboard_empty">The clipboard is empty</string>
-    <string name="queue_delete_selected">Del selected (%1$d)</string>
     <string name="queue_url_label">from</string>
+    <string name="btn_select_all">Select all</string>
+    <string name="btn_select_none">Select none</string>
 </resources>

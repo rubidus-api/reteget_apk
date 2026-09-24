@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.3.0** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.0/reteget-0.3.0.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.0)
+**ReteGet v0.3.1** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.1/reteget-0.3.1.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.1)
 
 **English** · [한국어](README.ko.md)
 
@@ -9,11 +9,19 @@
 Download APKs, firmware images, and files directly on vintage devices without needing a PC, ADB, or modern app stores.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_queue-0.3.0.png" alt="ReteGet download queue on Android 2.3: a finished download, a failed one with Retry, and another finished one" width="220">
+  <img src="docs/screenshots/icon.png" alt="ReteGet app icon" width="96">
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/icon-monochrome.png" alt="ReteGet monochrome icon as a themed Android 13 home screen paints it" width="96">
+  <br>
+  <sub>App icon: normal, and monochrome (themed icons, Android 13+)</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/screenshot_queue-0.3.1.png" alt="ReteGet download queue on Android 2.3: one download in progress, a failed one with Retry, and a finished one" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_template-0.3.0.png" alt="ReteGet URL template with the version field and the resolved URL on Android 2.3" width="220">
+  <img src="docs/screenshots/screenshot_template-0.3.1.png" alt="ReteGet URL template with the version field and the resolved URL on Android 2.3" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets-0.3.0.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
+  <img src="docs/screenshots/screenshot_presets-0.3.1.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
 </p>
 
 ---
@@ -32,18 +40,18 @@ ReteGet is a dedicated, framework-only Android utility that bridges the gap, all
 
 - **Modern TLS 1.2 & Bundled Root CAs**: Wraps SSL socket creation to force-enable TLS 1.2 on Android 4.x with SNI reflection support. Bundles modern Root CAs (ISRG Root X1, DigiCert Global Root CA/G2, USERTrust, Google Trust Services) so downloads from modern GitHub Releases and CDN hosts succeed without warnings.
 - **Built-in TLS 1.3 / 1.2 Engine (works on Android 2.3)**: Android 2.3–4.x cannot talk to GitHub on their own: 2.3 has no TLS 1.2 at all, and 4.1 devices such as the Galaxy Note 2 fail with `SSLv3 alert handshake failure`. ReteGet carries its own TLS client written in plain Java: TLS 1.3 (RFC 8446) with X25519 or P-256 key exchange, AES-128-GCM, and ECDSA / RSA-PSS server signatures, falling back to TLS 1.2 (ECDHE + AES-GCM, Extended Master Secret) only for servers without TLS 1.3, with downgrade protection. X25519, AES-GCM, HKDF, ECDSA, RSA-PSS, X.509 parsing and certificate path validation are implemented in the app, because Android 2.3 cannot verify ECDSA certificates such as GitHub's. The server certificate chain and host name are always checked against the system and bundled root certificates. The engine is used automatically when the system TLS fails, or always with the checkbox. It is checked against the RFC 8448 handshake trace byte for byte and against independent TLS servers, and was verified by downloading from GitHub Releases on Android 2.3.7.
-- **Download Queue at the Top**: Every download goes into a queue shown at the top of the screen, one file at a time so an old phone is not overloaded. Each entry shows its file name, state and URL, with the progress bar underneath while it downloads; a failed download says why and can be retried or deleted; a finished one can be installed (with the same checksum and signing-key warnings as right after the download) or its record deleted (the file stays). Check boxes allow deleting several entries at once. The list survives closing the app, and an entry interrupted that way comes back as failed so it can be retried.
+- **Download Queue at the Top**: Every download goes into a queue shown at the top of the screen, one file at a time so an old phone is not overloaded. Each entry shows its file name, state and URL, with the progress bar underneath while it downloads; a failed download says why and can be retried or deleted; a finished one can be installed (with the same checksum and signing-key warnings as right after the download) or its record deleted (the file stays). **Select all** and **Delete selected** under the title remove several entries at once. The list survives closing the app, and an entry interrupted that way comes back as failed so it can be retried.
 - **Direct HTTP & Passive FTP**: Supports plain HTTP and zero-dependency RFC 959 passive mode FTP for fast local network or intranet software distribution.
 - **Release URL Templates (`{1}`, `{2}`, `{version}`)**: Detects bracketed placeholder tokens in download URLs (such as `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`). When present, ReteGet dynamically generates small input boxes so you only need to type the version number to fetch an update.
 - **Checksum & Hash Integrity Verification**: Verifies downloaded files against industry-standard hashes widely used by GitHub, GitLab, and open-source distributions: **SHA-256**, **SHA-1**, **MD5**, and **SHA-512**. You can paste raw hex digests, `sha256: <hash>`, or standard GNU `sha256sum` output lines (`<hash>  <filename>`). Automatically detects the algorithm, warns of corruption or tampering before installation, and provides one-tap hash copying.
 - **APK Signature & Author Continuity Verification**: Automatically inspects the X.509 signing certificate of downloaded APKs and calculates its SHA-256 fingerprint. Verifies continuity against currently installed packages (preventing `INSTALL_FAILED_UPDATE_INCOMPATIBLE` signature conflicts) and previous download history (TOFU model). If author signing keys change or conflict, a clear warning dialog is displayed with an option to inspect details and override.
 - **Rete Series Presets Built In**: ReteGet, ReteClock and ReteKey (the Android 4.0+ build, plus the Android 9+ build) come as ready-made version templates for GitHub Releases, with the expected SHA-256 and signing key already filled in. Your own presets are kept when the built-in list is updated.
-- **Named Presets & History Management**: Give each preset a name (e.g. *ReteGet*, *ReteClock*) so template URLs are easy to tell apart. **Save** next to *Download* keeps the URL above as a preset. Each preset shows its name, URL and last download record in one wrapping paragraph, with short actions on top: **Use** (or tap the preset) loads it into the URL bar with the known version filled in, **Edit** (or press and hold) changes the name and URL, **Up**/**Dn** reorder, **Del** deletes; check boxes allow batch deletion.
-- **Paste and Clear for the URL**: next to *Target URL*, **Paste** takes a link from the clipboard and **Clear** empties the field.
+- **Named Presets & History Management**: Give each preset a name (e.g. *ReteGet*, *ReteClock*) so template URLs are easy to tell apart. **Save** next to *Download* keeps the URL above as a preset. Each preset shows its name, URL and last download record in one wrapping paragraph, with short actions on top: **Use** (or tap the preset) loads it into the URL bar with the known version filled in, **Edit** (or press and hold) changes the name and URL, **Up**/**Dn** reorder, **Del** deletes; **Select all** and **Delete selected** work on the checked presets.
+- **Paste and Clear**: next to *Target URL* and *Expected Checksum*, **Paste** takes the text from the clipboard and **Clear** empties the field.
 - **Saves to the Download Folder**: Files go to the system Download folder (on Android 2.3 this is `/mnt/sdcard/Download`; "sdcard" is the name of the shared storage even on phones without a card slot). If shared storage is missing or busy (for example while mounted on a PC over USB), ReteGet saves into its own app storage instead, tells you so, and can still install APKs from there.
 - **One-Touch APK Installation**: Once an `.apk` file finishes downloading, ReteGet immediately prompts to launch the system package installer (`Intent.ACTION_VIEW` with MIME type `application/vnd.android.package-archive`).
 - **Unverified SSL Bypass Option**: Includes an optional checkbox to allow unverified or self-signed certificates when downloading from local test servers or home labs.
-- **Ultra-Lightweight & Single-Dex**: About 146 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
+- **Ultra-Lightweight & Single-Dex**: About 164 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
 
 ## Target Platform & Compatibility
 

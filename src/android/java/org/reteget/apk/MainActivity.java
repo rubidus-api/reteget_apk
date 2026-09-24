@@ -86,9 +86,8 @@ public class MainActivity extends Activity {
     private TextView txtNoPresets;
     private LinearLayout layoutPresetsList;
     private LinearLayout layoutPresetBatch;
-    private CheckBox chkPresetSelectAll;
+    private Button btnPresetSelectAll;
     private Button btnDeleteSelected;
-    private boolean isUpdatingSelectAll = false;
 
     private List<PresetItem> presetList = new ArrayList<PresetItem>();
     private Map<String, EditText> variableInputs = new HashMap<String, EditText>();
@@ -100,6 +99,8 @@ public class MainActivity extends Activity {
     private LinearLayout layoutQueueList;
     private Button btnQueueClear;
     private Button btnQueueDeleteSelected;
+    private Button btnQueueSelectAll;
+    private int queueCount;
     private final java.util.Set<Long> selectedQueueIds = new java.util.HashSet<Long>();
     private File lastDownloadedFile;
     private String lastComputedSha256 = null;
@@ -199,6 +200,7 @@ public class MainActivity extends Activity {
         layoutQueueList = (LinearLayout) findViewById(R.id.layout_queue_list);
         btnQueueClear = (Button) findViewById(R.id.btn_queue_clear);
         btnQueueDeleteSelected = (Button) findViewById(R.id.btn_queue_delete_selected);
+        btnQueueSelectAll = (Button) findViewById(R.id.btn_queue_select_all);
         progressBar = (ProgressBar) findViewById(R.id.progress_bar);
         txtProgressDetails = (TextView) findViewById(R.id.txt_progress_details);
         txtStatus = (TextView) findViewById(R.id.txt_status);
@@ -227,7 +229,7 @@ public class MainActivity extends Activity {
         txtNoPresets = (TextView) findViewById(R.id.txt_no_presets);
         layoutPresetsList = (LinearLayout) findViewById(R.id.layout_presets_list);
         layoutPresetBatch = (LinearLayout) findViewById(R.id.layout_preset_batch);
-        chkPresetSelectAll = (CheckBox) findViewById(R.id.chk_preset_select_all);
+        btnPresetSelectAll = (Button) findViewById(R.id.btn_preset_select_all);
         btnDeleteSelected = (Button) findViewById(R.id.btn_delete_selected);
     }
 
@@ -280,13 +282,13 @@ public class MainActivity extends Activity {
             }
         });
 
-        chkPresetSelectAll.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+        btnPresetSelectAll.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isUpdatingSelectAll) return;
-                for (PresetItem p : presetList) {
-                    p.isSelected = isChecked;
-                }
+            public void onClick(View v) {
+                // Select all; when everything is already selected, the same button clears it.
+                boolean all = !presetList.isEmpty();
+                for (PresetItem p : presetList) all &= p.isSelected;
+                for (PresetItem p : presetList) p.isSelected = !all;
                 renderPresets();
             }
         });
@@ -309,9 +311,6 @@ public class MainActivity extends Activity {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
                                 presetList.removeAll(toDelete);
-                                isUpdatingSelectAll = true;
-                                chkPresetSelectAll.setChecked(false);
-                                isUpdatingSelectAll = false;
                                 savePresets();
                                 renderPresets();
                                 Toast.makeText(MainActivity.this,
@@ -335,21 +334,7 @@ public class MainActivity extends Activity {
         txtNoPresets.setVisibility(View.GONE);
         layoutPresetBatch.setVisibility(View.VISIBLE);
 
-        int selectedCount = 0;
-        for (PresetItem p : presetList) {
-            if (p.isSelected) selectedCount++;
-        }
-
-        if (selectedCount > 0) {
-            btnDeleteSelected.setVisibility(View.VISIBLE);
-            btnDeleteSelected.setText(getString(R.string.btn_delete_selected, selectedCount));
-        } else {
-            btnDeleteSelected.setVisibility(View.GONE);
-        }
-
-        isUpdatingSelectAll = true;
-        chkPresetSelectAll.setChecked(selectedCount == presetList.size() && !presetList.isEmpty());
-        isUpdatingSelectAll = false;
+        updateBatchSelectionState();
 
         LayoutInflater inflater = LayoutInflater.from(this);
         for (int i = 0; i < presetList.size(); i++) {
@@ -467,15 +452,10 @@ public class MainActivity extends Activity {
         for (PresetItem p : presetList) {
             if (p.isSelected) selectedCount++;
         }
-        if (selectedCount > 0) {
-            btnDeleteSelected.setVisibility(View.VISIBLE);
-            btnDeleteSelected.setText(getString(R.string.btn_delete_selected, selectedCount));
-        } else {
-            btnDeleteSelected.setVisibility(View.GONE);
-        }
-        isUpdatingSelectAll = true;
-        chkPresetSelectAll.setChecked(selectedCount == presetList.size() && !presetList.isEmpty());
-        isUpdatingSelectAll = false;
+        btnDeleteSelected.setText(getString(R.string.btn_delete_selected, selectedCount));
+        btnDeleteSelected.setEnabled(selectedCount > 0);
+        boolean all = selectedCount > 0 && selectedCount == presetList.size();
+        btnPresetSelectAll.setText(all ? R.string.btn_select_none : R.string.btn_select_all);
     }
 
     private void selectAndLoadPreset(PresetItem item, boolean showToast) {
@@ -779,11 +759,20 @@ public class MainActivity extends Activity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                if (s.length() > 0) {
-                    btnClearChecksum.setVisibility(View.VISIBLE);
-                } else {
-                    btnClearChecksum.setVisibility(View.GONE);
+                // Paste and Clear stay visible, like the ones beside the URL.
+            }
+        });
+
+        findViewById(R.id.btn_paste_checksum).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String text = readClipboard();
+                if (text == null || text.trim().length() == 0) {
+                    Toast.makeText(MainActivity.this, R.string.toast_clipboard_empty, Toast.LENGTH_SHORT).show();
+                    return;
                 }
+                editExpectedChecksum.setText(text.trim());
+                editExpectedChecksum.setSelection(editExpectedChecksum.getText().length());
             }
         });
 
@@ -981,6 +970,18 @@ public class MainActivity extends Activity {
                 sQueue.clearFinished();
             }
         });
+        btnQueueSelectAll.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                List<DownloadTask> all = sQueue.snapshot();
+                if (selectedQueueIds.size() == all.size()) {
+                    selectedQueueIds.clear();
+                } else {
+                    for (DownloadTask t : all) selectedQueueIds.add(t.id);
+                }
+                renderQueue();
+            }
+        });
         btnQueueDeleteSelected.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -1111,6 +1112,7 @@ public class MainActivity extends Activity {
             anyFinished |= !t.isActive();
             layoutQueueList.addView(buildQueueRow(t));
         }
+        queueCount = ordered.size();
         java.util.Set<Long> present = new java.util.HashSet<Long>();
         for (DownloadTask t : ordered) present.add(t.id);
         selectedQueueIds.retainAll(present);
@@ -1131,8 +1133,9 @@ public class MainActivity extends Activity {
 
     private void updateQueueSelectionButton() {
         int n = selectedQueueIds.size();
-        btnQueueDeleteSelected.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
-        btnQueueDeleteSelected.setText(getString(R.string.queue_delete_selected, n));
+        btnQueueDeleteSelected.setText(getString(R.string.btn_delete_selected, n));
+        btnQueueDeleteSelected.setEnabled(n > 0);
+        btnQueueSelectAll.setText(n > 0 && n == queueCount ? R.string.btn_select_none : R.string.btn_select_all);
     }
 
     /** Updates progress in place; returns false when the row must be rebuilt. */
@@ -1243,34 +1246,33 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** A flat word-button like the preset actions. */
+    /** A bordered word-button, the same as the preset actions. */
     private void addQueueButton(LinearLayout parent, int text, boolean danger, final Runnable action) {
-        TextView b = new TextView(this, null, 0);
+        Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(14);
         b.setTypeface(null, android.graphics.Typeface.BOLD);
-        b.setTextColor(danger ? 0xFFC62828 : 0xFF37474F);
-        b.setGravity(android.view.Gravity.CENTER);
+        if (danger) b.setTextColor(getResources().getColorStateList(R.color.btn_danger_text));
         float d = getResources().getDisplayMetrics().density;
-        b.setPadding((int) (7 * d), 0, (int) (7 * d), 0);
         b.setMinWidth((int) (40 * d));
-        b.setBackgroundResource(android.R.drawable.list_selector_background);
-        b.setClickable(true);
-        b.setFocusable(true);
+        b.setPadding((int) (8 * d), (int) (3 * d), (int) (8 * d), (int) (3 * d));
         b.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 action.run();
             }
         });
-        parent.addView(b, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (int) (40 * d)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = (int) (4 * d);
+        parent.addView(b, lp);
     }
 
+    /** Every entry ends with its progress bar: full when done, where it stopped when not. */
     private static void applyProgress(ProgressBar bar, DownloadTask t) {
         int pct = t.percent();
-        bar.setVisibility(t.state == DownloadTask.State.RUNNING ? View.VISIBLE : View.GONE);
+        bar.setVisibility(View.VISIBLE);
         bar.setIndeterminate(t.state == DownloadTask.State.RUNNING && pct < 0);
-        if (pct >= 0) bar.setProgress(pct);
+        bar.setProgress(pct >= 0 ? pct : 0);
     }
 
     private String queueStatusText(DownloadTask t) {

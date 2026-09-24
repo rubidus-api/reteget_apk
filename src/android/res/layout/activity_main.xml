@@ -48,18 +48,31 @@
                     android:textColor="#006699" />
 
                 <Button
-                    android:id="@+id/btn_queue_delete_selected"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="12sp"
-                    android:visibility="gone" />
-
-                <Button
                     android:id="@+id/btn_queue_clear"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/queue_clear_finished"
                     android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp">
+
+                <Button
+                    android:id="@+id/btn_queue_select_all"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_select_all" />
+
+                <Button
+                    android:id="@+id/btn_queue_delete_selected"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:textColor="@color/btn_danger_text" />
             </LinearLayout>
 
             <LinearLayout
@@ -142,38 +155,44 @@
                 android:paddingTop="4dp" />
         </LinearLayout>
 
-        <!-- Expected Checksum Input (optional) -->
-        <TextView
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/lbl_checksum"
-            android:textSize="13sp"
-            android:textColor="#444444"
-            android:paddingTop="2dp" />
-
+        <!-- Expected Checksum Input (optional), with Paste and Clear like the URL field -->
         <LinearLayout
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:gravity="center_vertical"
+            android:paddingTop="2dp">
 
-            <EditText
-                android:id="@+id/edit_expected_checksum"
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="@string/checksum_hint"
-                android:singleLine="true"
-                android:textSize="12sp" />
+                android:text="@string/lbl_checksum"
+                android:textSize="13sp"
+                android:textColor="#444444" />
+
+            <Button
+                android:id="@+id/btn_paste_checksum"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_paste" />
 
             <Button
                 android:id="@+id/btn_clear_checksum"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_clear"
-                android:textSize="11sp"
-                android:visibility="gone" />
+                android:layout_marginLeft="4dp"
+                android:text="@string/btn_clear_url" />
         </LinearLayout>
+
+        <EditText
+            android:id="@+id/edit_expected_checksum"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:hint="@string/checksum_hint"
+            android:singleLine="true"
+            android:textSize="12sp" />
 
         <CheckBox
             android:id="@+id/chk_insecure_ssl"
@@ -213,6 +232,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:layout_marginLeft="8dp"
                 android:text="@string/btn_add_preset" />
 
             <Button
@@ -220,6 +240,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:layout_marginLeft="8dp"
                 android:text="@string/btn_cancel"
                 android:enabled="false" />
         </LinearLayout>
@@ -388,27 +409,18 @@
                 android:gravity="center_vertical"
                 android:layout_marginBottom="6dp">
 
-                <CheckBox
-                    android:id="@+id/chk_preset_select_all"
+                <Button
+                    android:id="@+id/btn_preset_select_all"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/chk_select_all"
-                    android:textSize="11sp"
-                    android:textColor="#444444" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
+                    android:text="@string/btn_select_all" />
 
                 <Button
                     android:id="@+id/btn_delete_selected"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/btn_delete_selected"
-                    android:textSize="11sp"
-                    android:textColor="#cc0000"
-                    android:visibility="gone" />
+                    android:layout_marginLeft="8dp"
+                    android:textColor="@color/btn_danger_text" />
             </LinearLayout>
 
             <TextView

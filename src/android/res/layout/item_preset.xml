@@ -53,7 +53,7 @@
             android:id="@+id/btn_delete"
             style="@style/PresetAction"
             android:text="Del"
-            android:textColor="#c62828" />
+            android:textColor="@color/btn_danger_text" />
     </LinearLayout>
 
     <TextView

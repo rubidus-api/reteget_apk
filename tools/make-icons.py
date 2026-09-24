@@ -160,6 +160,54 @@ def render_layer(size, fill, bold):
     return image.resize((size, size), Image.LANCZOS)
 
 
+# A smaller check box than the stock 32dp one: 22dp, in the app's grey, with an orange ring when it
+# has focus (D-pad) or is being pressed, like the compact buttons.
+CHECK_DENSITIES = {"ldpi": 17, "mdpi": 22, "hdpi": 33, "xhdpi": 44, "xxhdpi": 66, "xxxhdpi": 88}
+CHECK_BORDER = (120, 144, 156, 255)   # #78909C
+CHECK_FOCUS = (255, 152, 0, 255)      # #FF9800
+CHECK_FILL = (55, 71, 79, 255)        # #37474F when checked
+CHECK_TICK = (255, 255, 255, 255)
+
+
+def render_check(size, checked, focused):
+    big = size * SUPERSAMPLE
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    inset = big * 0.08
+    stroke = big * (0.12 if focused else 0.09)
+    box = [inset, inset, big - inset, big - inset]
+    radius = big * 0.16
+    border = CHECK_FOCUS if focused else CHECK_BORDER
+    draw.rounded_rectangle(box, radius=radius, fill=border)
+    inner = [box[0] + stroke, box[1] + stroke, box[2] - stroke, box[3] - stroke]
+    draw.rounded_rectangle(inner, radius=max(1, radius - stroke),
+                           fill=CHECK_FILL if checked else (255, 255, 255, 255))
+    if checked:
+        w = big * 0.11
+        draw.line([(big * 0.27, big * 0.52), (big * 0.43, big * 0.68), (big * 0.74, big * 0.34)],
+                  fill=CHECK_TICK, width=int(w), joint="curve")
+    return image.resize((size, size), Image.LANCZOS)
+
+
+# README pictures of the icon: the normal launcher icon, and the monochrome layer the way a themed
+# Android 13 home screen paints it (theme colour on a round plate), since the raw layer is black on
+# transparent and would vanish on GitHub's dark theme.
+README_DIR = os.path.join(ROOT, "docs", "screenshots")
+README_SIZE = 192
+THEMED_PLATE = (214, 227, 255, 255)
+THEMED_INK = (27, 46, 94, 255)
+
+
+def render_themed_preview(size):
+    mono = render_layer(size, (0, 0, 0, 255), False)
+    plate = Image.new("RGBA", (size * SUPERSAMPLE, size * SUPERSAMPLE), (0, 0, 0, 0))
+    ImageDraw.Draw(plate).ellipse([0, 0, plate.size[0] - 1, plate.size[1] - 1], fill=THEMED_PLATE)
+    plate = plate.resize((size, size), Image.LANCZOS)
+    ink = Image.new("RGBA", (size, size), THEMED_INK)
+    plate.paste(ink, (0, 0), mono.split()[3])
+    return plate
+
+
 def write(image, path):
     """Saves as an indexed PNG with per-entry alpha: the drawing has two colours plus their
     anti-aliased edges, so 64 palette entries keep the edges smooth at a third of the size."""
@@ -185,6 +233,14 @@ def main():
         d = os.path.join(RES, "drawable-" + density)
         write(render_layer(size, LETTERING, True), os.path.join(d, "ic_launcher_foreground.png"))
         write(render_layer(size, (0, 0, 0, 255), False), os.path.join(d, "ic_launcher_monochrome.png"))
+    write(render(README_SIZE), os.path.join(README_DIR, "icon.png"))
+    write(render_themed_preview(README_SIZE), os.path.join(README_DIR, "icon-monochrome.png"))
+    for density, size in CHECK_DENSITIES.items():
+        d = os.path.join(RES, "drawable-" + density)
+        for checked in (False, True):
+            for focused in (False, True):
+                name = "checkbox_%s%s.png" % ("on" if checked else "off", "_focus" if focused else "")
+                write(render_check(size, checked, focused), os.path.join(d, name))
     return 0
 
 

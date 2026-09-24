@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- From Android 4.2 the check box adds its drawable's width to the text padding itself, so only
+         the gap is given here; before that the padding must include the 22dp box (values/). -->
+    <style name="CompactCheckBox" parent="@android:style/Widget.CompoundButton.CheckBox">
+        <item name="android:button">@drawable/checkbox_compact</item>
+        <item name="android:paddingLeft">6dp</item>
+    </style>
+</resources>

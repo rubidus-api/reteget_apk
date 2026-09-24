@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A 22dp check box (the stock one is 32dp); orange ring while focused or pressed. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:state_pressed="true" android:drawable="@drawable/checkbox_on_focus" />
+    <item android:state_checked="true" android:state_focused="true" android:drawable="@drawable/checkbox_on_focus" />
+    <item android:state_checked="true" android:drawable="@drawable/checkbox_on" />
+    <item android:state_pressed="true" android:drawable="@drawable/checkbox_off_focus" />
+    <item android:state_focused="true" android:drawable="@drawable/checkbox_off_focus" />
+    <item android:drawable="@drawable/checkbox_off" />
+</selector>
