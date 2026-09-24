@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.2.0** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.2.0/reteget-0.2.0.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.2.0)
+**ReteGet v0.3.0** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.0/reteget-0.3.0.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.0)
 
 **English** · [한국어](README.ko.md)
 
@@ -9,11 +9,11 @@
 Download APKs, firmware images, and files directly on vintage devices without needing a PC, ADB, or modern app stores.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_queue.png" alt="ReteGet download queue on Android 2.3: a finished download, a failed one with Retry, and another finished one" width="220">
+  <img src="docs/screenshots/screenshot_queue-0.3.0.png" alt="ReteGet download queue on Android 2.3: a finished download, a failed one with Retry, and another finished one" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet URL template with the version field and the resolved URL on Android 2.3" width="220">
+  <img src="docs/screenshots/screenshot_template-0.3.0.png" alt="ReteGet URL template with the version field and the resolved URL on Android 2.3" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
+  <img src="docs/screenshots/screenshot_presets-0.3.0.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
 </p>
 
 ---
@@ -43,7 +43,7 @@ ReteGet is a dedicated, framework-only Android utility that bridges the gap, all
 - **Saves to the Download Folder**: Files go to the system Download folder (on Android 2.3 this is `/mnt/sdcard/Download`; "sdcard" is the name of the shared storage even on phones without a card slot). If shared storage is missing or busy (for example while mounted on a PC over USB), ReteGet saves into its own app storage instead, tells you so, and can still install APKs from there.
 - **One-Touch APK Installation**: Once an `.apk` file finishes downloading, ReteGet immediately prompts to launch the system package installer (`Intent.ACTION_VIEW` with MIME type `application/vnd.android.package-archive`).
 - **Unverified SSL Bypass Option**: Includes an optional checkbox to allow unverified or self-signed certificates when downloading from local test servers or home labs.
-- **Ultra-Lightweight & Single-Dex**: About 115 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
+- **Ultra-Lightweight & Single-Dex**: About 146 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
 
 ## Target Platform & Compatibility
 

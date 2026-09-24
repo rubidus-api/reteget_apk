@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.2.0** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.2.0/reteget-0.2.0.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.2.0)
+**ReteGet v0.3.0** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.0/reteget-0.3.0.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.0)
 
 [English](README.md) · **한국어**
 
@@ -9,11 +9,11 @@
 PC나 ADB 연결, 무거운 현대 앱 스토어 없이도 구형 기기에서 직접 APK, 펌웨어, 패키지 파일을 다운로드하고 설치할 수 있습니다.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_queue.png" alt="안드로이드 2.3의 ReteGet 다운로드 큐: 완료 항목, 다시 시도할 수 있는 실패 항목, 또 다른 완료 항목" width="220">
+  <img src="docs/screenshots/screenshot_queue-0.3.0.png" alt="안드로이드 2.3의 ReteGet 다운로드 큐: 완료 항목, 다시 시도할 수 있는 실패 항목, 또 다른 완료 항목" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_template.png" alt="안드로이드 2.3의 ReteGet URL 템플릿, 버전 입력칸과 완성된 주소" width="220">
+  <img src="docs/screenshots/screenshot_template-0.3.0.png" alt="안드로이드 2.3의 ReteGet URL 템플릿, 버전 입력칸과 완성된 주소" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets.png" alt="안드로이드 2.3의 ReteGet 기본 rete 프리셋: 이름, 체크섬, 서명자" width="220">
+  <img src="docs/screenshots/screenshot_presets-0.3.0.png" alt="안드로이드 2.3의 ReteGet 기본 rete 프리셋: 이름, 체크섬, 서명자" width="220">
 </p>
 
 ---
@@ -43,7 +43,7 @@ ReteGet은 외부 프레임워크 없는 순수 프레임워크 기반 안드로
 - **기본 다운로드 폴더에 저장**: 파일은 시스템의 기본 다운로드 폴더에 저장됩니다(안드로이드 2.3에서는 `/mnt/sdcard/Download`. 여기서 "sdcard"는 카드 슬롯이 없는 폰에서도 쓰는 공용 저장소의 이름입니다). 공용 저장소가 없거나 사용 중이면(예: USB로 PC에 연결된 동안) 앱 전용 저장소에 대신 저장하고 알려 주며, 그곳에서도 APK를 설치할 수 있습니다.
 - **원터치 APK 설치 연동**: `.apk` 파일 다운로드가 끝나면 즉시 시스템 패키지 인스톨러(`Intent.ACTION_VIEW` - `application/vnd.android.package-archive`) 호출 다이얼로그를 띄워 한 번의 탭으로 설치 화면으로 진입합니다.
 - **자체 서명 / 사설 SSL 우회 체크박스**: 홈랩이나 사내 테스트 서버의 자체 서명 인증서 환경을 위해 인증서 검증을 건너뛰는 옵션을 기본 제공합니다.
-- **초경량 단일 Dex**: 최종 APK 크기 약 115 KB, 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
+- **초경량 단일 Dex**: 최종 APK 크기 약 146 KB, 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
 
 ## 대상 플랫폼 및 호환성
 

@@ -258,7 +258,7 @@ public class PresetItem {
     }
 
     /** Version of the built-in preset list; raising it merges the defaults again on upgrade. */
-    public static final int DEFAULTS_VERSION = 3;
+    public static final int DEFAULTS_VERSION = 4;
 
     /** URL prefix shared by every built-in preset (the rete series on GitHub Releases). */
     public static final String RETE_RELEASES = "https://github.com/rubidus-api/";
@@ -273,7 +273,7 @@ public class PresetItem {
         java.util.List<PresetItem> list = new java.util.ArrayList<PresetItem>();
         list.add(new PresetItem("ReteGet",
                 RETE_RELEASES + "reteget_apk/releases/download/v{1}/reteget-{1}.apk",
-                "reteget-0.2.0.apk", -1, "0.2.0", 0L, "",
+                "reteget-0.3.0.apk", -1, "0.3.0", 0L, "",
                 "9F:98:92:2B:44:4F:3C:51:88:D7:F7:8C:F7:3C:4C:F8:36:0B:DB:B3:98:89:7C:3A:25:58:BF:28:DB:A6:4D:52",
                 "ReteGet"));
         list.add(new PresetItem("ReteClock",
