@@ -1,5 +1,7 @@
 # ReteGet
 
+**ReteGet v0.1.0** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.1.0/reteget-0.1.0.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.1.0)
+
 **English** · [한국어](README.ko.md)
 
 **A lightweight, standalone file and APK downloader for legacy Android devices (Android 2.3+ Gingerbread through Android 4.x KitKat and newer).**
