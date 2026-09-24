@@ -1,6 +1,6 @@
 Categories:
-  - Download
   - App Store & Updater
+  - Download
 License: MIT
 AuthorName: ReteGet contributors
 SourceCode: https://github.com/rubidus-api/reteget_apk
@@ -17,7 +17,7 @@ Binaries:
 Builds:
   - versionName: 0.3.3
     versionCode: 6
-    commit: COMMIT_OF_v0.3.3
+    commit: c82eab28470e7a6b91fec58cf823a7283665ba93
     output: dist/reteget-*-unsigned.apk
     build:
       - sdkmanager "platforms;android-19" "platforms;android-34" "build-tools;35.0.0"
