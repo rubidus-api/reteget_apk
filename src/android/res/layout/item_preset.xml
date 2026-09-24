@@ -31,9 +31,7 @@
             android:layout_height="wrap_content"
             android:textSize="13sp"
             android:textStyle="bold"
-            android:textColor="#1a237e"
-            android:singleLine="true"
-            android:ellipsize="end" />
+            android:textColor="#1a237e" />
 
         <TextView
             android:id="@+id/txt_preset_url"
@@ -51,8 +49,6 @@
             android:layout_height="wrap_content"
             android:textSize="10sp"
             android:textColor="#555555"
-            android:maxLines="2"
-            android:ellipsize="end"
             android:paddingTop="2dp" />
     </LinearLayout>
 

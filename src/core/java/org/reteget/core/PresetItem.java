@@ -116,7 +116,7 @@ public class PresetItem {
         if (lastSha256 != null && lastSha256.trim().length() >= 8) {
             if (sb.length() > 0) sb.append("\n");
             String trimmed = lastSha256.trim();
-            sb.append("SHA-256: ").append(trimmed.substring(0, Math.min(12, trimmed.length()))).append("…");
+            sb.append("SHA-256 ").append(trimmed.substring(0, Math.min(8, trimmed.length()))).append("…");
         }
         if (lastAuthor != null && !lastAuthor.trim().isEmpty()) {
             if (lastSha256 != null && !lastSha256.trim().isEmpty()) sb.append(" · ");
@@ -191,7 +191,7 @@ public class PresetItem {
         return item;
     }
 
-    private static String extractJsonString(String json, String key) {
+    static String extractJsonString(String json, String key) {
         String pattern = "\"" + key + "\":\"";
         int idx = json.indexOf(pattern);
         if (idx == -1) {
@@ -221,7 +221,7 @@ public class PresetItem {
         return null;
     }
 
-    private static long extractJsonLong(String json, String key, long def) {
+    static long extractJsonLong(String json, String key, long def) {
         String pattern = "\"" + key + "\":";
         int idx = json.indexOf(pattern);
         if (idx == -1) {
@@ -241,7 +241,7 @@ public class PresetItem {
         }
     }
 
-    private static String escapeJson(String s) {
+    static String escapeJson(String s) {
         if (s == null) return "\"\"";
         StringBuilder sb = new StringBuilder("\"");
         for (int i = 0; i < s.length(); i++) {

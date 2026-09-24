@@ -70,4 +70,19 @@
     <string name="dialog_sig_mismatch_title">APK 서명 불일치 경고</string>
     <string name="dialog_sig_mismatch_msg">이 APK의 제작자 서명이 기존 버전과 일치하지 않습니다!\n\n• 기존 (%1$s): %2$s\n• 신규 APK: %3$s\n\n출처가 다르거나 위조된 빌드일 수 있으며, 안드로이드 시스템에서 서명 충돌로 설치가 차단될 수 있습니다.\n\n그래도 무시하고 설치를 진행하시겠습니까?</string>
     <string name="dialog_btn_sig_install_anyway">무시하고 설치 진행</string>
+    <string name="queue_title">다운로드 큐</string>
+    <string name="queue_clear_finished">끝난 항목 지우기</string>
+    <string name="queue_waiting">대기 중</string>
+    <string name="queue_downloading">다운로드 중</string>
+    <string name="queue_done">완료</string>
+    <string name="queue_failed">실패</string>
+    <string name="queue_cancelled">취소됨</string>
+    <string name="queue_interrupted">앱이 닫혀서 중단됨</string>
+    <string name="queue_cancel">취소</string>
+    <string name="queue_retry">다시 시도</string>
+    <string name="queue_remove">삭제</string>
+    <string name="queue_install">설치</string>
+    <string name="queue_added">다운로드 큐에 추가했습니다</string>
+    <string name="queue_file_missing">파일이 더 이상 없습니다</string>
+    <string name="queue_connecting">연결 중…</string>
 </resources>

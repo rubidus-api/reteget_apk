@@ -30,7 +30,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import org.reteget.core.ApkSignatureVerifier;
 import org.reteget.core.ChecksumVerifier;
-import org.reteget.core.DownloadEngine;
+import org.reteget.core.DownloadQueue;
+import org.reteget.core.DownloadTask;
 import org.reteget.core.PresetItem;
 import org.reteget.core.TlsHelper;
 import org.reteget.core.UrlTemplate;
@@ -47,6 +48,7 @@ public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "reteget_prefs";
     private static final String KEY_PRESETS = "saved_presets";
+    private static final String KEY_QUEUE = "download_queue";
     private static final String PREF_PRESETS_VERSION = "presets_version";
 
     private ScrollView scrollView;
@@ -92,7 +94,11 @@ public class MainActivity extends Activity {
     private Map<String, EditText> variableInputs = new HashMap<String, EditText>();
     private UrlTemplate currentTemplate;
 
-    private DownloadEngine downloadEngine;
+    /** Process-wide, so downloads continue across screen rotation and activity restarts. */
+    private static DownloadQueue sQueue;
+    private LinearLayout layoutQueueSection;
+    private LinearLayout layoutQueueList;
+    private Button btnQueueClear;
     private File lastDownloadedFile;
     private String lastComputedSha256 = null;
     private boolean hasChecksumMismatch = false;
@@ -116,6 +122,7 @@ public class MainActivity extends Activity {
         setupChecksumControls();
         setupDownloadControls();
         setupInstallControl();
+        setupQueue();
     }
 
     /**
@@ -185,6 +192,9 @@ public class MainActivity extends Activity {
 
         btnDownload = (Button) findViewById(R.id.btn_download);
         btnCancel = (Button) findViewById(R.id.btn_cancel);
+        layoutQueueSection = (LinearLayout) findViewById(R.id.layout_queue_section);
+        layoutQueueList = (LinearLayout) findViewById(R.id.layout_queue_list);
+        btnQueueClear = (Button) findViewById(R.id.btn_queue_clear);
         progressBar = (ProgressBar) findViewById(R.id.progress_bar);
         txtProgressDetails = (TextView) findViewById(R.id.txt_progress_details);
         txtStatus = (TextView) findViewById(R.id.txt_status);
@@ -817,10 +827,10 @@ public class MainActivity extends Activity {
         btnCancel.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (downloadEngine != null) {
-                    downloadEngine.cancel();
-                    btnCancel.setEnabled(false);
-                    txtStatus.setText("Cancelling download…");
+                for (DownloadTask t : sQueue.snapshot()) {
+                    if (t.state == DownloadTask.State.RUNNING) {
+                        sQueue.cancel(t.id);
+                    }
                 }
             }
         });
@@ -841,140 +851,293 @@ public class MainActivity extends Activity {
 
         final File destDir = chooseDownloadDir();
 
-        btnDownload.setEnabled(false);
-        btnCancel.setEnabled(true);
+        String template = currentTemplate != null && !currentTemplate.getPlaceholders().isEmpty()
+                ? currentTemplate.getTemplate() : editUrl.getText().toString().trim();
+        String version = null;
+        EditText v1 = variableInputs.get("1");
+        if (v1 == null) v1 = variableInputs.get("version");
+        if (v1 != null && v1.getText().toString().trim().length() > 0) {
+            version = v1.getText().toString().trim();
+        }
+        sQueue.enqueue(url, destDir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
+                editExpectedChecksum.getText().toString().trim(), template, version);
+        Toast.makeText(this, R.string.queue_added, Toast.LENGTH_SHORT).show();
+        scrollView.smoothScrollTo(0, 0);
+    }
+
+    // ------------------------------------------------------------------ download queue
+
+    private void setupQueue() {
+        synchronized (MainActivity.class) {
+            if (sQueue == null) {
+                final SharedPreferences sp = getApplicationContext()
+                        .getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                sQueue = new DownloadQueue(new DownloadQueue.Store() {
+                    @Override
+                    public String load() {
+                        return sp.getString(KEY_QUEUE, null);
+                    }
+
+                    @Override
+                    public void save(String data) {
+                        sp.edit().putString(KEY_QUEUE, data).commit();
+                    }
+                }, DownloadQueue.defaultEngines());
+            }
+        }
+        sQueue.setListener(new DownloadQueue.Listener() {
+            @Override
+            public void onTaskChanged(final DownloadTask task) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (task == null || !updateQueueRow(task)) {
+                            renderQueue();
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onTaskCompleted(final DownloadTask task) {
+                // Hash off the UI thread, then run the usual checks and install prompt.
+                final File file = new File(task.filePath);
+                String sha;
+                try {
+                    sha = ChecksumVerifier.computeHash(file, "SHA-256");
+                } catch (Exception e) {
+                    sha = "Error computing hash: " + e.getMessage();
+                }
+                final String hash = sha;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        renderQueue();
+                        handleCompletedDownload(task, file, hash);
+                    }
+                });
+            }
+        });
+        btnQueueClear.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sQueue.clearFinished();
+            }
+        });
+        renderQueue();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (sQueue != null) {
+            sQueue.setListener(null);
+        }
+        super.onDestroy();
+    }
+
+    private void handleCompletedDownload(DownloadTask task, File destinationFile, String sha256) {
+        lastComputedSha256 = sha256;
+        lastDownloadedFile = destinationFile;
         btnInstall.setVisibility(View.GONE);
         layoutChecksumResult.setVisibility(View.GONE);
         hasChecksumMismatch = false;
         layoutSignatureResult.setVisibility(View.GONE);
         hasSignatureMismatch = false;
         lastSignatureResult = null;
+        if (isPrivateDownload(destinationFile)) {
+            // Readable by the package installer; see chooseDownloadDir().
+            destinationFile.setReadable(true, false);
+        }
+        txtStatus.setText((isPrivateDownload(destinationFile)
+                ? "Shared storage unavailable. Saved in app storage: " : "Saved to: ")
+                + destinationFile.getAbsolutePath()
+                + " (" + formatBytes(destinationFile.length()) + ")"
+                + (task.tlsSummary != null ? "\n" + task.tlsSummary : ""));
 
-        progressBar.setVisibility(View.VISIBLE);
-        progressBar.setIndeterminate(true);
-        txtProgressDetails.setVisibility(View.VISIBLE);
-        txtProgressDetails.setText("");
-        txtStatus.setText("Connecting…");
+        verifyDownloadedFile(destinationFile, task.expectedChecksum);
 
-        downloadEngine = new DownloadEngine();
-        final boolean insecure = chkInsecureSsl.isChecked();
-        final boolean pureTls = chkPureTls.isChecked();
-
-        downloadEngine.download(url, destDir, insecure, pureTls, new DownloadEngine.Listener() {
-            @Override
-            public void onStart(final String filename, final long totalBytes) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (totalBytes > 0) {
-                            progressBar.setIndeterminate(false);
-                            progressBar.setMax(100);
-                            progressBar.setProgress(0);
-                            txtStatus.setText("Downloading " + filename + " (" + formatBytes(totalBytes) + ")");
-                        } else {
-                            progressBar.setIndeterminate(true);
-                            txtStatus.setText("Downloading " + filename + " (stream)");
-                        }
-                    }
-                });
+        if (destinationFile.getName().toLowerCase().endsWith(".apk")) {
+            btnInstall.setVisibility(View.VISIBLE);
+            verifyApkSignature(destinationFile);
+            updatePresetDownloadRecord(destinationFile, task.template, task.url, task.version);
+            if (hasChecksumMismatch) {
+                // Keep visible for manual install button review
+            } else if (hasSignatureMismatch) {
+                promptSignatureMismatchDialog(destinationFile);
+            } else {
+                promptAutoInstall(destinationFile);
             }
+        } else {
+            updatePresetDownloadRecord(destinationFile, task.template, task.url, task.version);
+            Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
+        }
+    }
 
-            @Override
-            public void onProgress(final long bytesRead, final long totalBytes, final int percent, final long bytesPerSec) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (percent >= 0) {
-                            progressBar.setIndeterminate(false);
-                            progressBar.setProgress(percent);
-                        }
-                        String details = formatBytes(bytesRead)
-                                + (totalBytes > 0 ? " / " + formatBytes(totalBytes) + " (" + percent + "%)" : "")
-                                + (bytesPerSec > 0 ? " — " + formatBytes(bytesPerSec) + "/s" : "");
-                        txtProgressDetails.setText(details);
-                    }
+    /** Rows shown: running and waiting entries in queue order, then finished ones, newest first. */
+    private void renderQueue() {
+        List<DownloadTask> all = sQueue.snapshot();
+        List<DownloadTask> ordered = new ArrayList<DownloadTask>();
+        for (DownloadTask t : all) {
+            if (t.isActive()) ordered.add(t);
+        }
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if (!all.get(i).isActive()) ordered.add(all.get(i));
+        }
+        layoutQueueList.removeAllViews();
+        queueRows.clear();
+        boolean anyFinished = false;
+        for (DownloadTask t : ordered) {
+            anyFinished |= !t.isActive();
+            layoutQueueList.addView(buildQueueRow(t));
+        }
+        layoutQueueSection.setVisibility(ordered.isEmpty() ? View.GONE : View.VISIBLE);
+        btnQueueClear.setVisibility(anyFinished ? View.VISIBLE : View.GONE);
+        btnCancel.setEnabled(sQueue.isBusy());
+    }
+
+    private static final class QueueRow {
+        DownloadTask.State state;
+        TextView status;
+        ProgressBar progress;
+    }
+
+    private final Map<Long, QueueRow> queueRows = new HashMap<Long, QueueRow>();
+
+    /** Updates progress in place; returns false when the row must be rebuilt. */
+    private boolean updateQueueRow(DownloadTask t) {
+        QueueRow row = queueRows.get(t.id);
+        if (row == null || row.state != t.state) return false;
+        row.status.setText(queueStatusText(t));
+        applyProgress(row.progress, t);
+        return true;
+    }
+
+    private View buildQueueRow(final DownloadTask t) {
+        float d = getResources().getDisplayMetrics().density;
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(0, (int) (6 * d), 0, (int) (6 * d));
+
+        TextView name = new TextView(this);
+        name.setText(t.displayName());
+        name.setTextSize(14);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setTextColor(0xFF333333);
+        row.addView(name);
+
+        TextView status = new TextView(this);
+        status.setText(queueStatusText(t));
+        status.setTextSize(12);
+        status.setTextColor(t.state == DownloadTask.State.FAILED ? 0xFFCC0000
+                : t.state == DownloadTask.State.DONE ? 0xFF2E7D32 : 0xFF555555);
+        row.addView(status);
+
+        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        applyProgress(progress, t);
+        row.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.setGravity(android.view.Gravity.RIGHT);
+        switch (t.state) {
+            case QUEUED:
+            case RUNNING:
+                addQueueButton(buttons, R.string.queue_cancel, new Runnable() {
+                    public void run() { sQueue.cancel(t.id); }
                 });
-            }
-
-            @Override
-            public void onComplete(final File destinationFile) {
-                // Compute hash off the main UI thread
-                try {
-                    lastComputedSha256 = ChecksumVerifier.computeHash(destinationFile, "SHA-256");
-                } catch (Exception e) {
-                    lastComputedSha256 = "Error computing hash: " + e.getMessage();
-                }
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        lastDownloadedFile = destinationFile;
-                        btnDownload.setEnabled(true);
-                        btnCancel.setEnabled(false);
-                        progressBar.setVisibility(View.GONE);
-                        txtProgressDetails.setVisibility(View.GONE);
-                        if (isPrivateDownload(destinationFile)) {
-                            // Readable by the package installer; see chooseDownloadDir().
-                            destinationFile.setReadable(true, false);
-                        }
-                        String tls = downloadEngine.getLastTlsSummary();
-                        txtStatus.setText((isPrivateDownload(destinationFile)
-                                ? "Shared storage unavailable. Saved in app storage: " : "Saved to: ")
-                                + destinationFile.getAbsolutePath()
-                                + " (" + formatBytes(destinationFile.length()) + ")"
-                                + (tls != null ? "\n" + tls : ""));
-
-                        String expected = editExpectedChecksum.getText().toString().trim();
-                        verifyDownloadedFile(destinationFile, expected);
-
-                        if (destinationFile.getName().toLowerCase().endsWith(".apk")) {
-                            btnInstall.setVisibility(View.VISIBLE);
-                            verifyApkSignature(destinationFile);
-                            updatePresetDownloadRecord(destinationFile);
-                            if (hasChecksumMismatch) {
-                                // Keep visible for manual install button review
-                            } else if (hasSignatureMismatch) {
-                                promptSignatureMismatchDialog(destinationFile);
+                break;
+            case FAILED:
+            case CANCELLED:
+                addQueueButton(buttons, R.string.queue_retry, new Runnable() {
+                    public void run() { sQueue.retry(t.id); }
+                });
+                addQueueButton(buttons, R.string.queue_remove, new Runnable() {
+                    public void run() { sQueue.remove(t.id); }
+                });
+                break;
+            case DONE:
+                if (t.fileName != null && t.fileName.toLowerCase().endsWith(".apk")) {
+                    addQueueButton(buttons, R.string.queue_install, new Runnable() {
+                        public void run() {
+                            File f = new File(t.filePath);
+                            if (f.exists()) {
+                                launchApkInstaller(f);
                             } else {
-                                promptAutoInstall(destinationFile);
+                                Toast.makeText(MainActivity.this, R.string.queue_file_missing, Toast.LENGTH_SHORT).show();
                             }
-                        } else {
-                            updatePresetDownloadRecord(destinationFile);
-                            Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
                         }
-                    }
+                    });
+                }
+                addQueueButton(buttons, R.string.queue_remove, new Runnable() {
+                    public void run() { sQueue.remove(t.id); }
                 });
-            }
+                break;
+        }
+        row.addView(buttons, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
-            @Override
-            public void onError(final Exception ex) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        btnDownload.setEnabled(true);
-                        btnCancel.setEnabled(false);
-                        progressBar.setVisibility(View.GONE);
-                        txtProgressDetails.setVisibility(View.GONE);
-                        txtStatus.setText("Download failed: " + ex.getMessage());
-                        Toast.makeText(MainActivity.this, "Error: " + ex.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                });
-            }
+        QueueRow qr = new QueueRow();
+        qr.state = t.state;
+        qr.status = status;
+        qr.progress = progress;
+        queueRows.put(t.id, qr);
+        return row;
+    }
 
+    private void addQueueButton(LinearLayout parent, int text, final Runnable action) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(12);
+        b.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onCancel() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        btnDownload.setEnabled(true);
-                        btnCancel.setEnabled(false);
-                        progressBar.setVisibility(View.GONE);
-                        txtProgressDetails.setVisibility(View.GONE);
-                        txtStatus.setText("Download cancelled.");
-                    }
-                });
+            public void onClick(View v) {
+                action.run();
             }
         });
+        parent.addView(b);
+    }
+
+    private static void applyProgress(ProgressBar bar, DownloadTask t) {
+        int pct = t.percent();
+        boolean show = t.state == DownloadTask.State.RUNNING || t.state == DownloadTask.State.DONE;
+        bar.setVisibility(show ? View.VISIBLE : View.GONE);
+        bar.setIndeterminate(t.state == DownloadTask.State.RUNNING && pct < 0);
+        if (pct >= 0) bar.setProgress(pct);
+    }
+
+    private String queueStatusText(DownloadTask t) {
+        StringBuilder sb = new StringBuilder();
+        switch (t.state) {
+            case QUEUED:
+                sb.append(getString(R.string.queue_waiting));
+                break;
+            case RUNNING:
+                if (t.fileName == null) {
+                    // Not connected yet: DNS, TCP and the TLS handshake (a retry with the
+                    // built-in engine can take a few seconds on an old phone).
+                    sb.append(getString(R.string.queue_connecting));
+                    break;
+                }
+                sb.append(getString(R.string.queue_downloading)).append(" · ").append(formatBytes(t.bytesDone));
+                if (t.bytesTotal > 0) {
+                    sb.append(" / ").append(formatBytes(t.bytesTotal)).append(" (").append(t.percent()).append("%)");
+                }
+                if (t.bytesPerSec > 0) sb.append(" · ").append(formatBytes(t.bytesPerSec)).append("/s");
+                break;
+            case DONE:
+                sb.append(getString(R.string.queue_done)).append(" · ").append(formatBytes(t.bytesDone));
+                break;
+            case FAILED:
+                sb.append(getString(R.string.queue_failed)).append(": ").append(
+                        DownloadQueue.INTERRUPTED.equals(t.error) ? getString(R.string.queue_interrupted) : t.error);
+                break;
+            case CANCELLED:
+                sb.append(getString(R.string.queue_cancelled));
+                break;
+        }
+        return sb.toString();
     }
 
     private void setupInstallControl() {
@@ -1156,11 +1319,11 @@ public class MainActivity extends Activity {
                 .commit();
     }
 
-    private void updatePresetDownloadRecord(File destinationFile) {
+    private void updatePresetDownloadRecord(File destinationFile, String templatePattern, String finalUrl,
+                                            String version) {
         if (destinationFile == null || !destinationFile.exists()) return;
-        String rawUrl = editUrl.getText().toString().trim();
-        String templatePattern = (currentTemplate != null) ? currentTemplate.getTemplate() : rawUrl;
-        String finalUrl = getFinalDownloadUrl();
+        String rawUrl = templatePattern != null ? templatePattern : finalUrl;
+        if (templatePattern == null) templatePattern = finalUrl;
 
         for (PresetItem p : presetList) {
             if (p.url.equals(templatePattern) || p.url.equals(rawUrl) || p.url.equals(finalUrl)) {
@@ -1172,7 +1335,7 @@ public class MainActivity extends Activity {
                     p.lastSigFingerprint = lastSignatureResult.currentCert.sha256Fingerprint;
                     p.lastAuthor = lastSignatureResult.currentCert.getDisplayAuthor();
                 }
-                p.lastVersion = extractVersionInfo(destinationFile);
+                p.lastVersion = version != null ? version : extractVersionInfo(destinationFile);
                 savePresets();
                 renderPresets();
                 break;

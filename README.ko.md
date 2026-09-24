@@ -9,11 +9,11 @@
 PC나 ADB 연결, 무거운 현대 앱 스토어 없이도 구형 기기에서 직접 APK, 펌웨어, 패키지 파일을 다운로드하고 설치할 수 있습니다.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet 안드로이드 4.4 템플릿 변수 및 체크섬 입력 화면" width="220">
+  <img src="docs/screenshots/screenshot_queue.png" alt="안드로이드 2.3의 ReteGet 다운로드 큐: 완료 항목, 다시 시도할 수 있는 실패 항목, 또 다른 완료 항목" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_resolved.png" alt="ReteGet 버전 번호 입력 및 URL 실시간 조합" width="220">
+  <img src="docs/screenshots/screenshot_template.png" alt="안드로이드 2.3의 ReteGet URL 템플릿, 버전 입력칸과 완성된 주소" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets.png" alt="ReteGet 하단 프리셋 카드 목록" width="220">
+  <img src="docs/screenshots/screenshot_presets.png" alt="안드로이드 2.3의 ReteGet 기본 rete 프리셋: 이름, 체크섬, 서명자" width="220">
 </p>
 
 ---
@@ -32,6 +32,7 @@ ReteGet은 외부 프레임워크 없는 순수 프레임워크 기반 안드로
 
 - **모던 TLS 1.2 강제 활성화 및 최신 Root CA 번들 탑재**: 소켓 생성 계층을 감싸 Android 4.x에서 TLS 1.2를 강제로 켜고 리플렉션을 통해 SNI를 주입합니다. 최신 주요 루트 인증서(Let's Encrypt의 ISRG Root X1, DigiCert Global Root CA/G2, USERTrust, Google Trust Services)를 앱 내부에 번들하여 최신 GitHub 릴리즈나 CDN 호스트로부터의 HTTPS 다운로드를 성공시킵니다.
 - **내장 TLS 1.3 / 1.2 엔진 (안드로이드 2.3에서도 동작)**: 안드로이드 2.3~4.x는 스스로는 GitHub에 접속하지 못합니다. 2.3에는 TLS 1.2가 아예 없고, 갤럭시 노트 2 같은 4.1 기기는 `SSLv3 alert handshake failure`로 실패합니다. ReteGet은 순수 Java로 작성한 자체 TLS 클라이언트를 내장합니다: TLS 1.3(RFC 8446, X25519 또는 P-256 키 교환, AES-128-GCM, ECDSA / RSA-PSS 서버 서명)을 쓰고, TLS 1.3이 없는 서버에만 TLS 1.2(ECDHE + AES-GCM, Extended Master Secret)로 내려가며 다운그레이드 공격을 막습니다. 안드로이드 2.3은 GitHub의 ECDSA 인증서를 검증하지 못하므로 X25519, AES-GCM, HKDF, ECDSA, RSA-PSS, X.509 해석과 인증서 경로 검증까지 앱이 직접 합니다. 서버 인증서 체인과 호스트 이름은 시스템 및 내장 루트 인증서로 항상 확인합니다. 시스템 TLS가 실패하면 자동으로, 체크박스를 켜면 항상 이 엔진을 씁니다. RFC 8448 핸드셰이크 기록과 바이트 단위로 대조하고 독립적인 TLS 서버들과 시험했으며, 안드로이드 2.3.7에서 GitHub 릴리즈 다운로드로 확인했습니다.
+- **화면 맨 위의 다운로드 큐**: 모든 다운로드는 화면 맨 위에 보이는 큐에 들어가며, 구형 기기에 무리가 가지 않도록 한 번에 하나씩 받습니다. 항목마다 파일 이름, 진행률, 크기와 속도가 표시되고, 실패한 항목은 이유가 표시되며 다시 시도하거나 삭제할 수 있고, 완료된 항목은 설치하거나 기록을 지울 수 있습니다(파일은 남습니다). 목록은 앱을 닫아도 유지되고, 그렇게 중단된 항목은 실패로 표시되어 다시 시도할 수 있습니다.
 - **순수 HTTP 및 패시브 FTP 지원**: 가정 내 홈 서버나 사내 인트라넷 망에서 간편히 앱을 배포할 수 있도록 일반 HTTP와 의존성 제로 순수 Java 소켓 기반 RFC 959 패시브 모드 FTP 다운로드를 지원합니다.
 - **릴리즈 URL 템플릿 지원 (`{1}`, `{2}`, `{version}`)**: 다운로드 주소에 포함된 괄호형 플레이스홀더(예: `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`)를 자동으로 감지합니다. 템플릿이 인식되면 작은 입력창을 화면에 띄워, 긴 주소를 매번 다시 입력할 필요 없이 버전 번호만 넣으면 완성된 주소로 다운로드합니다.
 - **체크섬 및 무결성 해시 검증**: GitHub, GitLab 및 오픈소스 생태계에서 널리 쓰이는 **SHA-256**, **SHA-1**, **MD5**, **SHA-512** 해시 검증을 지원합니다. 순수 16진수 값, `sha256: <해시>`, 또는 리눅스 `sha256sum` 명령 출력 형식(`<해시>  <파일명>`)을 그대로 복사해서 붙여넣어도 자동으로 알고리즘을 감지하여 파일을 대조합니다. 일치 시 안전한 설치를 돕고, 불일치 시 설치 전 경고를 띄워 위변조 및 다운로드 손상을 방지하며, 계산된 해시값을 원터치로 복사할 수 있습니다.

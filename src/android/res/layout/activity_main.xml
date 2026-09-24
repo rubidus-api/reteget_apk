@@ -20,6 +20,48 @@
             android:textColor="#333333"
             android:paddingBottom="8dp" />
 
+        <!-- Download queue: at the top, hidden while empty. Rows are added in code. -->
+        <LinearLayout
+            android:id="@+id/layout_queue_section"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F2F6FA"
+            android:padding="8dp"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/txt_queue_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/queue_title"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#006699" />
+
+                <Button
+                    android:id="@+id/btn_queue_clear"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/queue_clear_finished"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_queue_list"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+
         <TextView
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"

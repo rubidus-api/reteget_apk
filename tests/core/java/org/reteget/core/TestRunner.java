@@ -44,6 +44,8 @@ public class TestRunner {
         testPresetItemDisplayName();
         testPresetItemLegacyCompatibility();
         testPresetDefaultsAndMerge();
+        testDownloadQueue();
+        testIconResources();
 
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
@@ -432,6 +434,179 @@ public class TestRunner {
         assertEquals("merge keeps user presets and refreshes built-ins", 5, merged.size());
         assertEquals("user preset kept after the built-ins", "My mirror", merged.get(4).name);
         assertEquals("stale built-in replaced by the current one", "ReteGet", merged.get(0).name);
+    }
+
+    /** Fake engine: completes, fails or waits depending on the URL. */
+    private static final class FakeEngines implements DownloadQueue.EngineFactory {
+        final List<DownloadEngine.Listener> waiting = new java.util.ArrayList<DownloadEngine.Listener>();
+        int started;
+
+        public DownloadQueue.Engine create() {
+            return new DownloadQueue.Engine() {
+                DownloadEngine.Listener l;
+
+                public void start(DownloadTask t, DownloadEngine.Listener listener) {
+                    started++;
+                    l = listener;
+                    listener.onStart(t.displayName(), 10);
+                    if (t.url.contains("fail")) {
+                        listener.onError(new java.io.IOException("HTTP 404"));
+                    } else if (t.url.contains("wait")) {
+                        waiting.add(listener);
+                    } else {
+                        listener.onProgress(10, 10, 100, 5);
+                        listener.onComplete(new File(t.destDir, t.displayName()));
+                    }
+                }
+
+                public void cancel() {
+                    l.onCancel();
+                }
+
+                public String tlsSummary() {
+                    return "TLS 1.3 test";
+                }
+            };
+        }
+    }
+
+    private static void testDownloadQueue() {
+        final String[] saved = { null };
+        DownloadQueue.Store store = new DownloadQueue.Store() {
+            public String load() { return saved[0]; }
+            public void save(String data) { saved[0] = data; }
+        };
+        FakeEngines engines = new FakeEngines();
+        final List<DownloadTask> completed = new java.util.ArrayList<DownloadTask>();
+        DownloadQueue q = new DownloadQueue(store, engines);
+        q.setListener(new DownloadQueue.Listener() {
+            public void onTaskChanged(DownloadTask t) {}
+            public void onTaskCompleted(DownloadTask t) { completed.add(t); }
+        });
+        File dir = new File("build/test/queue");
+        DownloadTask a = q.enqueue("https://h/a.apk", dir, false, false, "abc");
+        DownloadTask b = q.enqueue("https://h/wait.apk", dir, false, true, "");
+        DownloadTask c = q.enqueue("https://h/c.zip", dir, false, false, "");
+        List<DownloadTask> s = q.snapshot();
+        assertEquals("queue: first entry done", DownloadTask.State.DONE, s.get(0).state);
+        assertEquals("queue: completion reported with TLS info", "TLS 1.3 test", completed.get(0).tlsSummary);
+        assertEquals("queue: expected checksum kept", "abc", completed.get(0).expectedChecksum);
+        assertEquals("queue: second entry running", DownloadTask.State.RUNNING, s.get(1).state);
+        assertEquals("queue: third waits its turn (one at a time)", DownloadTask.State.QUEUED, s.get(2).state);
+
+        q.cancel(b.id);
+        s = q.snapshot();
+        assertEquals("queue: cancelled entry stays listed", DownloadTask.State.CANCELLED, s.get(1).state);
+        assertEquals("queue: next entry ran after cancel", DownloadTask.State.DONE, s.get(2).state);
+
+        DownloadTask f = q.enqueue("https://h/fail.bin", dir, false, false, "");
+        DownloadTask failed = q.snapshot().get(3);
+        assertTrue("queue: failure recorded with reason",
+                failed.state == DownloadTask.State.FAILED && "HTTP 404".equals(failed.error));
+        int before = engines.started;
+        q.retry(f.id);
+        assertTrue("queue: retry runs the entry again", engines.started == before + 1);
+
+        q.remove(a.id);
+        assertEquals("queue: removing a finished record", 3, q.snapshot().size());
+        assertTrue("queue: removing a done record keeps nothing else changed",
+                q.snapshot().get(0).id == b.id);
+
+        q.retry(b.id); // waits again
+        assertEquals("queue: retried entry running", DownloadTask.State.RUNNING, q.snapshot().get(0).state);
+        DownloadQueue reloaded = new DownloadQueue(store, engines);
+        DownloadTask back = reloaded.snapshot().get(0);
+        assertTrue("queue: entry running at process death comes back as failed/interrupted",
+                back.state == DownloadTask.State.FAILED && DownloadQueue.INTERRUPTED.equals(back.error));
+        assertEquals("queue: records survive reload", 3, reloaded.snapshot().size());
+        q.remove(b.id);
+        assertEquals("queue: removing a running entry cancels and drops it", 2, q.snapshot().size());
+        assertEquals("queue: clear finished", 2, q.clearFinished());
+        assertEquals("queue: empty after clear", 0, q.snapshot().size());
+        DownloadTask parsed = DownloadTask.fromJson(new DownloadTask(7, "https://x/\"q\".apk", "/d", true, true,
+                "sha", 5).toJson());
+        assertTrue("queue: JSON round trip with quotes", parsed != null && parsed.url.equals("https://x/\"q\".apk")
+                && parsed.insecure && parsed.forceBuiltInTls && parsed.id == 7);
+    }
+
+    private static java.awt.image.BufferedImage png(String rel) throws Exception {
+        return javax.imageio.ImageIO.read(new File("src/android/res/" + rel));
+    }
+
+    private static int alpha(java.awt.image.BufferedImage img, int x, int y) {
+        return (img.getRGB(x, y) >>> 24) & 0xff;
+    }
+
+    /** Connected opaque pieces (alpha >= 128) in rows [y0, y1). */
+    private static int pieces(java.awt.image.BufferedImage img, int y0, int y1) {
+        int w = img.getWidth();
+        boolean[][] seen = new boolean[y1 - y0][w];
+        int count = 0;
+        for (int y = y0; y < y1; y++) {
+            for (int x = 0; x < w; x++) {
+                if (seen[y - y0][x] || alpha(img, x, y) < 128) continue;
+                count++;
+                java.util.ArrayDeque<int[]> stack = new java.util.ArrayDeque<int[]>();
+                stack.push(new int[] { x, y });
+                seen[y - y0][x] = true;
+                while (!stack.isEmpty()) {
+                    int[] p = stack.pop();
+                    int[][] next = { { p[0] + 1, p[1] }, { p[0] - 1, p[1] }, { p[0], p[1] + 1 }, { p[0], p[1] - 1 } };
+                    for (int[] n : next) {
+                        if (n[0] < 0 || n[0] >= w || n[1] < y0 || n[1] >= y1) continue;
+                        if (seen[n[1] - y0][n[0]] || alpha(img, n[0], n[1]) < 128) continue;
+                        seen[n[1] - y0][n[0]] = true;
+                        stack.push(n);
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private static void testIconResources() {
+        try {
+            String[] legacy = { "ldpi", "mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi" };
+            boolean all = true;
+            for (String d : legacy) {
+                all &= new File("src/android/res/drawable-" + d + "/ic_launcher.png").isFile();
+            }
+            for (String d : new String[] { "mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi" }) {
+                all &= new File("src/android/res/drawable-" + d + "/ic_launcher_foreground.png").isFile();
+                all &= new File("src/android/res/drawable-" + d + "/ic_launcher_monochrome.png").isFile();
+            }
+            assertTrue("icon: legacy PNGs and adaptive layers exist for every density", all);
+            String xml = new String(java.nio.file.Files.readAllBytes(
+                    new File("src/android/res/drawable-anydpi-v26/ic_launcher.xml").toPath()), "UTF-8");
+            assertTrue("icon: adaptive icon names background, foreground and monochrome",
+                    xml.contains("<background") && xml.contains("<foreground") && xml.contains("<monochrome"));
+            assertTrue("icon: adaptive icon is only in a -v26 folder (API 9-25 keep the PNG)",
+                    !new File("src/android/res/drawable/ic_launcher.xml").exists());
+
+            java.awt.image.BufferedImage icon = png("drawable-xxhdpi/ic_launcher.png");
+            assertTrue("icon: legacy corners are transparent and the plate is opaque",
+                    alpha(icon, 0, 0) == 0 && alpha(icon, icon.getWidth() - 1, icon.getHeight() - 1) == 0
+                            && alpha(icon, icon.getWidth() / 2, 4) == 255);
+
+            java.awt.image.BufferedImage mono = png("drawable-xxhdpi/ic_launcher_monochrome.png");
+            int opaque = 0;
+            for (int y = 0; y < mono.getHeight(); y++) {
+                for (int x = 0; x < mono.getWidth(); x++) {
+                    if (alpha(mono, x, y) >= 128) opaque++;
+                }
+            }
+            double share = opaque / (double) (mono.getWidth() * mono.getHeight());
+            assertTrue("icon: monochrome layer has the drawing opaque, not a plate with a hole (" 
+                    + String.format(java.util.Locale.US, "%.3f", share) + ")", share > 0.02 && share < 0.15);
+            java.awt.image.BufferedImage fg = png("drawable-xxhdpi/ic_launcher_foreground.png");
+            assertTrue("icon: foreground layer is transparent outside the drawing", alpha(fg, 0, 0) == 0
+                    && alpha(fg, fg.getWidth() / 2, 2) == 0);
+            int h = mono.getHeight();
+            assertTrue("icon: arrow and tray are separate shapes on the themed layer",
+                    pieces(mono, h / 2, h) >= 2);
+        } catch (Exception e) {
+            assertTrue("icon resources: " + e, false);
+        }
     }
 
     private static void testPureGcmEncryptionDecryption() {

@@ -34,6 +34,11 @@
 # Tests
 !/tests/
 
+# The generator of the launcher icon PNGs (run only when the design changes).
+!/tools/
+/tools/*
+!/tools/make-icons.py
+
 # Build outputs
 build/
 dist/

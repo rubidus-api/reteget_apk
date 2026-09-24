@@ -70,4 +70,19 @@
     <string name="dialog_sig_mismatch_title">APK Signature Mismatch Warning</string>
     <string name="dialog_sig_mismatch_msg">The signing certificate of this APK differs from the existing version!\n\n• Existing (%1$s): %2$s\n• This APK: %3$s\n\nInstalling this may cause an INSTALL_FAILED_UPDATE_INCOMPATIBLE error or may be an unverified/counterfeit build.\n\nDo you want to ignore this warning and proceed with installation?</string>
     <string name="dialog_btn_sig_install_anyway">Ignore &amp; Install Anyway</string>
+    <string name="queue_title">Download queue</string>
+    <string name="queue_clear_finished">Clear finished</string>
+    <string name="queue_waiting">Waiting</string>
+    <string name="queue_downloading">Downloading</string>
+    <string name="queue_done">Done</string>
+    <string name="queue_failed">Failed</string>
+    <string name="queue_cancelled">Cancelled</string>
+    <string name="queue_interrupted">Interrupted when the app was closed</string>
+    <string name="queue_cancel">Cancel</string>
+    <string name="queue_retry">Retry</string>
+    <string name="queue_remove">Remove</string>
+    <string name="queue_install">Install</string>
+    <string name="queue_added">Added to the download queue</string>
+    <string name="queue_file_missing">The file is no longer there</string>
+    <string name="queue_connecting">Connecting…</string>
 </resources>
