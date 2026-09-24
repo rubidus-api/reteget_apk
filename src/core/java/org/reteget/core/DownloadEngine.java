@@ -20,12 +20,13 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.net.ssl.X509TrustManager;
-import org.reteget.core.tls.PureTlsSocket;
+import org.reteget.core.tls.TlsClient;
+import org.reteget.core.tls.TlsConnection;
 
 /**
  * Universal download engine handling HTTP, HTTPS, and FTP downloads
  * with redirect following, Content-Disposition extraction, speed calculation,
- * Pure-Java TLS 1.2 fallback for legacy Android devices (API 16 / Galaxy Note 2),
+ * an in-tree TLS 1.3 / 1.2 engine for legacy Android devices (API 16 / Galaxy Note 2),
  * and cancellation support.
  */
 public class DownloadEngine {
@@ -46,7 +47,8 @@ public class DownloadEngine {
 
     private volatile boolean cancelled = false;
     private volatile HttpURLConnection activeConnection;
-    private volatile PureTlsSocket activePureTlsSocket;
+    private volatile TlsConnection activeTlsConnection;
+    private volatile String lastTlsSummary;
     private volatile Socket activePlainSocket;
 
     public void cancel() {
@@ -57,7 +59,7 @@ public class DownloadEngine {
                 conn.disconnect();
             } catch (Exception ignored) {}
         }
-        PureTlsSocket tlsSock = activePureTlsSocket;
+        TlsConnection tlsSock = activeTlsConnection;
         if (tlsSock != null) {
             try {
                 tlsSock.close();
@@ -69,6 +71,14 @@ public class DownloadEngine {
                 plainSock.close();
             } catch (Exception ignored) {}
         }
+    }
+
+    /**
+     * Protocol, cipher and key exchange of the last connection made by the in-tree TLS
+     * engine, or null when the download used the system TLS stack.
+     */
+    public String getLastTlsSummary() {
+        return lastTlsSummary;
     }
 
     public boolean isCancelled() {
@@ -85,6 +95,7 @@ public class DownloadEngine {
             public void run() {
                 try {
                     cancelled = false;
+                    lastTlsSummary = null;
                     if (urlStr.toLowerCase(Locale.US).startsWith("ftp://")) {
                         downloadFtp(urlStr, destinationDir, listener);
                     } else {
@@ -162,7 +173,7 @@ public class DownloadEngine {
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setInstanceFollowRedirects(false); // handle manually for HTTP->HTTPS or S3 redirects
-                conn.setRequestProperty("User-Agent", "reteget/0.1.0 (Android Legacy)");
+                conn.setRequestProperty("User-Agent", "reteget/0.2.0 (Android Legacy)");
                 conn.setRequestProperty("Accept-Encoding", "identity"); // Ensure raw Content-Length
 
                 TlsHelper.configureConnection(conn, insecure);
@@ -254,6 +265,12 @@ public class DownloadEngine {
 
             out.flush();
 
+            String encoding = conn.getContentEncoding();
+            boolean identity = encoding == null || encoding.equalsIgnoreCase("identity");
+            if (!cancelled && identity && totalBytes > 0 && downloaded != totalBytes) {
+                throw new EOFException("Download incomplete: received " + downloaded + " of " + totalBytes + " bytes");
+            }
+
             if (cancelled) {
                 if (out != null) {
                     try { out.close(); } catch (Exception ignored) {}
@@ -304,7 +321,7 @@ public class DownloadEngine {
         } catch (IOException e) {
             if (!cancelled && initialUrl.toLowerCase(Locale.US).startsWith("https://") && isSslError(e)) {
                 // System SSL handshake failed (e.g. SSLv3 protocol alert on Galaxy Note 2).
-                // Automatically fall back to Pure Java TLS 1.2 engine.
+                // Automatically fall back to the in-tree TLS engine (1.3, then 1.2).
                 downloadPureTls(initialUrl, destinationDir, insecure, listener);
                 return;
             }
@@ -316,7 +333,7 @@ public class DownloadEngine {
             throws IOException {
         String currentUrl = initialUrl;
         int redirectCount = 0;
-        PureTlsSocket currentTlsSocket = null;
+        TlsConnection currentTlsSocket = null;
         Socket currentPlainSocket = null;
         InputStream in = null;
         OutputStream out = null;
@@ -344,8 +361,9 @@ public class DownloadEngine {
 
                 if (isHttps) {
                     X509TrustManager tm = TlsHelper.getTrustManager(insecure);
-                    currentTlsSocket = PureTlsSocket.connect(host, port, CONNECT_TIMEOUT_MS, insecure ? null : tm);
-                    activePureTlsSocket = currentTlsSocket;
+                    currentTlsSocket = TlsClient.connect(host, port, READ_TIMEOUT_MS, insecure ? null : tm);
+                    activeTlsConnection = currentTlsSocket;
+                    lastTlsSummary = currentTlsSocket.getSummary();
                     sockIn = currentTlsSocket.getInputStream();
                     sockOut = currentTlsSocket.getOutputStream();
                 } else {
@@ -359,7 +377,7 @@ public class DownloadEngine {
 
                 String req = "GET " + path + " HTTP/1.1\r\n"
                         + "Host: " + host + "\r\n"
-                        + "User-Agent: reteget/0.1.0 (Android Legacy)\r\n"
+                        + "User-Agent: reteget/0.2.0 (Android Legacy)\r\n"
                         + "Accept-Encoding: identity\r\n"
                         + "Connection: close\r\n\r\n";
                 sockOut.write(req.getBytes("US-ASCII"));
@@ -441,6 +459,7 @@ public class DownloadEngine {
                 long lastTime = System.currentTimeMillis();
                 long lastDownloaded = 0;
                 long currentSpeed = 0;
+                boolean chunkedEnded = false;
 
                 if (isChunked) {
                     while (true) {
@@ -459,6 +478,7 @@ public class DownloadEngine {
                         }
                         if (chunkSize == 0) {
                             readLine(in); // trailing empty line
+                            chunkedEnded = true;
                             break;
                         }
 
@@ -514,6 +534,14 @@ public class DownloadEngine {
 
                 out.flush();
 
+                // A body cut short (connection closed early, or by an attacker) is never a success.
+                if (!cancelled && isChunked && !chunkedEnded) {
+                    throw new EOFException("Download incomplete: chunked body ended without its final chunk");
+                }
+                if (!cancelled && !isChunked && totalBytes > 0 && downloaded != totalBytes) {
+                    throw new EOFException("Download incomplete: received " + downloaded + " of " + totalBytes + " bytes");
+                }
+
                 if (cancelled) {
                     if (out != null) {
                         try { out.close(); } catch (Exception ignored) {}
@@ -556,14 +584,14 @@ public class DownloadEngine {
         }
     }
 
-    private void closeCurrentSockets(PureTlsSocket tlsSock, Socket plainSock) {
+    private void closeCurrentSockets(TlsConnection tlsSock, Socket plainSock) {
         if (tlsSock != null) {
             try { tlsSock.close(); } catch (Exception ignored) {}
         }
         if (plainSock != null) {
             try { plainSock.close(); } catch (Exception ignored) {}
         }
-        activePureTlsSocket = null;
+        activeTlsConnection = null;
         activePlainSocket = null;
     }
 

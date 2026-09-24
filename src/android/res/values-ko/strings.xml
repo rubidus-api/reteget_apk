@@ -8,7 +8,7 @@
     <string name="btn_install">APK 설치</string>
     <string name="lbl_templates">템플릿 변수:</string>
     <string name="chk_insecure">인증서 검증 건너뛰기 (자체 서명/구형 SSL 허용)</string>
-    <string name="chk_pure_tls">자체 Pure TLS 1.2 엔진 사용 (갤럭시 노트 2 / SSLv3 에러 해결)</string>
+    <string name="chk_pure_tls">내장 TLS 1.3/1.2 엔진 사용 (구형 안드로이드: 2.3, 갤럭시 노트 2)</string>
     <string name="status_idle">다운로드 준비 완료.</string>
     <string name="status_downloading">다운로드 중…</string>
     <string name="status_success">다운로드 완료!</string>

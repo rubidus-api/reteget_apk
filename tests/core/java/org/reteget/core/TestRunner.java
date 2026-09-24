@@ -13,6 +13,9 @@ public class TestRunner {
     private static int failed = 0;
 
     public static void main(String[] args) {
+        // Must precede any JSSE use: the JDK TLS server in TlsTests then rotates keys every
+        // 64 KiB, which exercises KeyUpdate handling in the TLS 1.3 client.
+        java.security.Security.setProperty("jdk.tls.keyLimits", "AES/GCM/NoPadding KeyUpdate 2^16");
         System.out.println("Running reteget unit tests...");
 
         testUrlTemplateBasic();
@@ -40,9 +43,14 @@ public class TestRunner {
         testPresetItemSerialization();
         testPresetItemDisplayName();
         testPresetItemLegacyCompatibility();
+        testPresetDefaultsAndMerge();
 
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
+
+        org.reteget.core.tls.TlsTests.run();
+        passed += org.reteget.core.tls.TlsTests.passed;
+        failed += org.reteget.core.tls.TlsTests.failed;
 
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");
@@ -395,6 +403,37 @@ public class TestRunner {
         assertEquals("legacy summary string", "No download record yet", item.getMetadataSummary());
     }
 
+    private static void testPresetDefaultsAndMerge() {
+        List<PresetItem> d = PresetItem.defaults();
+        assertEquals("four built-in rete presets", 4, d.size());
+        boolean allGithub = true;
+        boolean allTemplates = true;
+        for (PresetItem p : d) {
+            allGithub &= p.url.startsWith("https://github.com/rubidus-api/");
+            allTemplates &= p.url.contains("{1}") && p.lastVersion != null && !p.lastVersion.isEmpty();
+        }
+        assertTrue("built-in presets point at GitHub releases", allGithub);
+        assertTrue("built-in presets are version templates with a default version", allTemplates);
+        assertEquals("first preset is ReteGet", "ReteGet", d.get(0).name);
+        assertTrue("legacy ReteKey (minSdk 14) listed before the Android 9+ build",
+                d.get(2).url.endsWith("-legacy.apk") && !d.get(3).url.endsWith("-legacy.apk"));
+        UrlTemplate t = new UrlTemplate(d.get(1).url);
+        assertEquals("ReteClock template resolves to the release asset",
+                "https://github.com/rubidus-api/reteclock_apk/releases/download/v0.50.0/reteclock-0.50.0.apk",
+                t.resolve(java.util.Collections.singletonMap("1", "0.50.0")));
+
+        List<PresetItem> stored = new java.util.ArrayList<PresetItem>();
+        stored.add(new PresetItem("Old ReteKey",
+                "https://github.com/rubidus-api/retekey_apk/releases/download/v{1}/retekey-{1}.apk"));
+        stored.add(new PresetItem("My mirror", "https://example.org/files/{1}.zip"));
+        stored.add(new PresetItem("Old ReteGet",
+                "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk"));
+        List<PresetItem> merged = PresetItem.mergeDefaults(stored);
+        assertEquals("merge keeps user presets and refreshes built-ins", 5, merged.size());
+        assertEquals("user preset kept after the built-ins", "My mirror", merged.get(4).name);
+        assertEquals("stale built-in replaced by the current one", "ReteGet", merged.get(0).name);
+    }
+
     private static void testPureGcmEncryptionDecryption() {
         try {
             byte[] key = new byte[16];
@@ -405,7 +444,7 @@ public class TestRunner {
             byte[] plaintext = "Hello Pure Java TLS 1.2 AES-GCM on Galaxy Note 2!".getBytes("UTF-8");
             byte[] aad = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
 
-            org.reteget.core.tls.PureTlsSocket.PureGcm gcm = new org.reteget.core.tls.PureTlsSocket.PureGcm(key);
+            org.reteget.core.tls.AesGcm gcm = new org.reteget.core.tls.AesGcm(key);
             byte[] ciphertextWithTag = gcm.encrypt(iv, plaintext, aad);
 
             assertTrue("ciphertext longer than plaintext by 16 bytes",

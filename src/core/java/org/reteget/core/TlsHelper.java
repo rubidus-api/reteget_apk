@@ -130,13 +130,15 @@ public final class TlsHelper {
 
                 @Override
                 public X509Certificate[] getAcceptedIssuers() {
+                    // Union of both stores: the in-tree TLS engine uses these as its trust anchors.
+                    java.util.List<X509Certificate> all = new java.util.ArrayList<X509Certificate>();
                     if (bundledTrustManager != null) {
-                        return bundledTrustManager.getAcceptedIssuers();
+                        all.addAll(java.util.Arrays.asList(bundledTrustManager.getAcceptedIssuers()));
                     }
                     if (systemTrustManager != null) {
-                        return systemTrustManager.getAcceptedIssuers();
+                        all.addAll(java.util.Arrays.asList(systemTrustManager.getAcceptedIssuers()));
                     }
-                    return new X509Certificate[0];
+                    return all.toArray(new X509Certificate[all.size()]);
                 }
             };
 

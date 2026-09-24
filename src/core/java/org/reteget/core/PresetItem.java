@@ -257,6 +257,69 @@ public class PresetItem {
         return sb.toString();
     }
 
+    /** Version of the built-in preset list; raising it merges the defaults again on upgrade. */
+    public static final int DEFAULTS_VERSION = 3;
+
+    /** URL prefix shared by every built-in preset (the rete series on GitHub Releases). */
+    public static final String RETE_RELEASES = "https://github.com/rubidus-api/";
+
+    /**
+     * Built-in presets: the rete series apps, as version templates on GitHub Releases.
+     * Metadata is that of the latest release when this list was written, so the checksum
+     * and signing-key continuity checks work from the first download. ReteGet's own entry
+     * carries only the signing key: a build cannot know its own checksum.
+     */
+    public static java.util.List<PresetItem> defaults() {
+        java.util.List<PresetItem> list = new java.util.ArrayList<PresetItem>();
+        list.add(new PresetItem("ReteGet",
+                RETE_RELEASES + "reteget_apk/releases/download/v{1}/reteget-{1}.apk",
+                "reteget-0.2.0.apk", -1, "0.2.0", 0L, "",
+                "9F:98:92:2B:44:4F:3C:51:88:D7:F7:8C:F7:3C:4C:F8:36:0B:DB:B3:98:89:7C:3A:25:58:BF:28:DB:A6:4D:52",
+                "ReteGet"));
+        list.add(new PresetItem("ReteClock",
+                RETE_RELEASES + "reteclock_apk/releases/download/v{1}/reteclock-{1}.apk",
+                "reteclock-0.50.0.apk", 600292, "0.50.0", 1790185976000L,
+                "951f81b1f304d9eaa55dcc22c67d66424c7396b78bda0ba90c83d6bd937a5576",
+                "90:44:6B:52:80:AA:4C:E3:4B:FE:8B:33:25:2E:F6:BE:90:2C:74:4D:4F:5A:F2:03:A5:99:5A:4B:BD:4C:64:1D",
+                "reteclock"));
+        list.add(new PresetItem("ReteKey (Android 4.0+)",
+                RETE_RELEASES + "retekey_apk/releases/download/v{1}/retekey-{1}-legacy.apk",
+                "retekey-0.1.199-legacy.apk", 570754, "0.1.199", 1790181906000L,
+                "5f1bfb999143c9c420801a6b6652dc0933eec64104dd58dced0dcf6f031d1c9a",
+                "9E:DF:10:F8:08:8E:6E:EE:CE:98:31:68:7F:DE:92:DC:B7:37:C7:74:F1:D3:9E:C3:7C:59:69:05:AE:02:0C:35",
+                "ReteKey"));
+        list.add(new PresetItem("ReteKey (Android 9+)",
+                RETE_RELEASES + "retekey_apk/releases/download/v{1}/retekey-{1}.apk",
+                "retekey-0.1.199.apk", 709437, "0.1.199", 1790181906000L,
+                "3da307beb602222d4ab7ce88284c596e934a3f0f36c6711905e7cc03a0f2716e",
+                "9E:DF:10:F8:08:8E:6E:EE:CE:98:31:68:7F:DE:92:DC:B7:37:C7:74:F1:D3:9E:C3:7C:59:69:05:AE:02:0C:35",
+                "ReteKey"));
+        return list;
+    }
+
+    /**
+     * Upgrades a stored preset list to the current defaults: built-in rete presets are
+     * replaced by the current ones and listed first; every preset the user added is kept,
+     * in its original order.
+     */
+    public static java.util.List<PresetItem> mergeDefaults(java.util.List<PresetItem> stored) {
+        java.util.List<PresetItem> merged = defaults();
+        for (PresetItem p : stored) {
+            if (p == null || isBuiltIn(p) || merged.contains(p)) {
+                continue;
+            }
+            merged.add(p);
+        }
+        return merged;
+    }
+
+    /** True for presets written by an earlier built-in list (GitHub rete release templates). */
+    static boolean isBuiltIn(PresetItem p) {
+        String u = p.url == null ? "" : p.url;
+        return u.startsWith(RETE_RELEASES) && u.contains("{1}")
+                && (u.contains("/reteget_apk/") || u.contains("/reteclock_apk/") || u.contains("/retekey_apk/"));
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

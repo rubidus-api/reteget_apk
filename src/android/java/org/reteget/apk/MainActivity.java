@@ -48,7 +48,6 @@ public class MainActivity extends Activity {
     private static final String PREFS_NAME = "reteget_prefs";
     private static final String KEY_PRESETS = "saved_presets";
     private static final String PREF_PRESETS_VERSION = "presets_version";
-    private static final int CURRENT_PRESETS_VERSION = 2;
 
     private ScrollView scrollView;
     private EditText editUrl;
@@ -111,11 +110,38 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         bindViews();
-        setupPresets();
+        // The URL watcher creates the template fields that setupPresets() fills in.
         setupUrlWatcher();
+        setupPresets();
         setupChecksumControls();
         setupDownloadControls();
         setupInstallControl();
+    }
+
+    /**
+     * The system Download folder (Environment.DIRECTORY_DOWNLOADS, "/mnt/sdcard/Download" on
+     * Android 2.3, where "sdcard" is the shared storage even on phones without a card slot).
+     * When shared storage is missing, unmounted or read-only (e.g. mounted on a PC over USB),
+     * files go to this app's private "downloads" folder instead, opened for reading so the
+     * package installer can still read an APK.
+     */
+    private File chooseDownloadDir() {
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null && (dir.isDirectory() || dir.mkdirs()) && dir.canWrite()) {
+                return dir;
+            }
+        }
+        File dir = new File(getFilesDir(), "downloads");
+        dir.mkdirs();
+        getFilesDir().setExecutable(true, false);
+        dir.setExecutable(true, false);
+        dir.setReadable(true, false);
+        return dir;
+    }
+
+    private boolean isPrivateDownload(File f) {
+        return f.getAbsolutePath().startsWith(getFilesDir().getAbsolutePath());
     }
 
     private void disableStrictModeFileUriExposure() {
@@ -503,14 +529,6 @@ public class MainActivity extends Activity {
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         int presetsVer = sp.getInt(PREF_PRESETS_VERSION, 0);
 
-        if (presetsVer < CURRENT_PRESETS_VERSION) {
-            presetList.clear();
-            initDefaultPresets();
-            sp.edit().putInt(PREF_PRESETS_VERSION, CURRENT_PRESETS_VERSION).commit();
-            savePresets();
-            return;
-        }
-
         String raw = sp.getString(KEY_PRESETS, null);
         if (raw != null && !raw.trim().isEmpty()) {
             String[] items = raw.split("\n");
@@ -522,46 +540,14 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (presetList.isEmpty()) {
-            initDefaultPresets();
+        if (presetsVer < PresetItem.DEFAULTS_VERSION || presetList.isEmpty()) {
+            // Refresh the built-in rete presets while keeping every preset the user added.
+            java.util.List<PresetItem> merged = PresetItem.mergeDefaults(presetList);
+            presetList.clear();
+            presetList.addAll(merged);
+            sp.edit().putInt(PREF_PRESETS_VERSION, PresetItem.DEFAULTS_VERSION).commit();
             savePresets();
         }
-    }
-
-    private void initDefaultPresets() {
-        presetList.add(new PresetItem(
-                "ReteGet",
-                "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk",
-                "reteget-0.1.0.apk",
-                74510,
-                "0.1.0",
-                1727177644000L,
-                "088aadadd1c6d218a83f5faf6f838a2f6169c456028ec46be6bc7e3f8cefd49c",
-                "F8:14:1C:1F:B4:43:5D:89:12:4D:43:8B:79:84:DE:6B:44:E1:98:A2:BC:60:DE:4A:CF:22:98:81:49:EE:51:75",
-                "ReteGet development"
-        ));
-        presetList.add(new PresetItem(
-                "ReteClock",
-                "https://github.com/rubidus-api/reteclock_apk/releases/download/v{1}/reteclock-{1}.apk",
-                "reteclock-0.50.0.apk",
-                600292,
-                "0.50.0",
-                1727113976000L,
-                "951f81b1f304d9eaa55dcc22c67d66424c7396b78bda0ba90c83d6bd937a5576",
-                "90:44:6B:52:80:AA:4C:E3:4B:FE:8B:33:25:2E:F6:BE:90:2C:74:4D:4F:5A:F2:03:A5:99:5A:4B:BD:4C:64:1D",
-                "reteclock"
-        ));
-        presetList.add(new PresetItem(
-                "ReteKey",
-                "https://github.com/rubidus-api/retekey_apk/releases/download/v{1}/retekey-{1}.apk",
-                "retekey-0.1.199.apk",
-                709437,
-                "0.1.199",
-                1727109906000L,
-                "",
-                "",
-                ""
-        ));
     }
 
     private void saveNewPreset(String name, String url) {
@@ -853,13 +839,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        File destDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        if (destDir == null || !destDir.exists()) {
-            destDir = new File(Environment.getExternalStorageDirectory(), "Download");
-        }
-        if (!destDir.exists()) {
-            destDir.mkdirs();
-        }
+        final File destDir = chooseDownloadDir();
 
         btnDownload.setEnabled(false);
         btnCancel.setEnabled(true);
@@ -933,8 +913,16 @@ public class MainActivity extends Activity {
                         btnCancel.setEnabled(false);
                         progressBar.setVisibility(View.GONE);
                         txtProgressDetails.setVisibility(View.GONE);
-                        txtStatus.setText("Saved to: " + destinationFile.getAbsolutePath()
-                                + " (" + formatBytes(destinationFile.length()) + ")");
+                        if (isPrivateDownload(destinationFile)) {
+                            // Readable by the package installer; see chooseDownloadDir().
+                            destinationFile.setReadable(true, false);
+                        }
+                        String tls = downloadEngine.getLastTlsSummary();
+                        txtStatus.setText((isPrivateDownload(destinationFile)
+                                ? "Shared storage unavailable. Saved in app storage: " : "Saved to: ")
+                                + destinationFile.getAbsolutePath()
+                                + " (" + formatBytes(destinationFile.length()) + ")"
+                                + (tls != null ? "\n" + tls : ""));
 
                         String expected = editExpectedChecksum.getText().toString().trim();
                         verifyDownloadedFile(destinationFile, expected);

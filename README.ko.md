@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.1.0** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.1.0/reteget-0.1.0.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.1.0)
+**ReteGet v0.2.0** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.2.0/reteget-0.2.0.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.2.0)
 
 [English](README.md) · **한국어**
 
@@ -31,15 +31,17 @@ PC나 ADB 연결, 무거운 현대 앱 스토어 없이도 구형 기기에서 �
 ReteGet은 외부 프레임워크 없는 순수 프레임워크 기반 안드로이드 유틸리티로, 구형 기기에서 네트워크를 통해 파일을 직접 가져오고 앱을 업데이트할 수 있게 합니다:
 
 - **모던 TLS 1.2 강제 활성화 및 최신 Root CA 번들 탑재**: 소켓 생성 계층을 감싸 Android 4.x에서 TLS 1.2를 강제로 켜고 리플렉션을 통해 SNI를 주입합니다. 최신 주요 루트 인증서(Let's Encrypt의 ISRG Root X1, DigiCert Global Root CA/G2, USERTrust, Google Trust Services)를 앱 내부에 번들하여 최신 GitHub 릴리즈나 CDN 호스트로부터의 HTTPS 다운로드를 성공시킵니다.
-- **자체 Pure Java TLS 1.2 엔진 (갤럭시 노트 2 / 안드로이드 4.1 SSLv3 에러 해결)**: 삼성 갤럭시 노트 2(Android 4.1 / API 16) 등 초기 젤리빈 기기는 내장 OpenSSL에 현대 GCM 암호화 스위트가 없어 GitHub 접속 시 `sslv3 alert handshake failure` 오류가 발생합니다. ReteGet은 순수 Java 표준 암호 프리미티브만으로 작성된 초경량 TLS 1.2 클라이언트(NIST P-256 ECDHE, AES-128-GCM, SHA-256 PRF)를 내장하여 외부 라이브러리 없이도 완벽한 HTTPS 다운로드를 실현합니다. 시스템 SSL 실패 시 자동 전환 및 UI 토글을 모두 지원합니다.
+- **내장 TLS 1.3 / 1.2 엔진 (안드로이드 2.3에서도 동작)**: 안드로이드 2.3~4.x는 스스로는 GitHub에 접속하지 못합니다. 2.3에는 TLS 1.2가 아예 없고, 갤럭시 노트 2 같은 4.1 기기는 `SSLv3 alert handshake failure`로 실패합니다. ReteGet은 순수 Java로 작성한 자체 TLS 클라이언트를 내장합니다: TLS 1.3(RFC 8446, X25519 또는 P-256 키 교환, AES-128-GCM, ECDSA / RSA-PSS 서버 서명)을 쓰고, TLS 1.3이 없는 서버에만 TLS 1.2(ECDHE + AES-GCM, Extended Master Secret)로 내려가며 다운그레이드 공격을 막습니다. 안드로이드 2.3은 GitHub의 ECDSA 인증서를 검증하지 못하므로 X25519, AES-GCM, HKDF, ECDSA, RSA-PSS, X.509 해석과 인증서 경로 검증까지 앱이 직접 합니다. 서버 인증서 체인과 호스트 이름은 시스템 및 내장 루트 인증서로 항상 확인합니다. 시스템 TLS가 실패하면 자동으로, 체크박스를 켜면 항상 이 엔진을 씁니다. RFC 8448 핸드셰이크 기록과 바이트 단위로 대조하고 독립적인 TLS 서버들과 시험했으며, 안드로이드 2.3.7에서 GitHub 릴리즈 다운로드로 확인했습니다.
 - **순수 HTTP 및 패시브 FTP 지원**: 가정 내 홈 서버나 사내 인트라넷 망에서 간편히 앱을 배포할 수 있도록 일반 HTTP와 의존성 제로 순수 Java 소켓 기반 RFC 959 패시브 모드 FTP 다운로드를 지원합니다.
 - **릴리즈 URL 템플릿 지원 (`{1}`, `{2}`, `{version}`)**: 다운로드 주소에 포함된 괄호형 플레이스홀더(예: `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`)를 자동으로 감지합니다. 템플릿이 인식되면 작은 입력창을 화면에 띄워, 긴 주소를 매번 다시 입력할 필요 없이 버전 번호만 넣으면 완성된 주소로 다운로드합니다.
 - **체크섬 및 무결성 해시 검증**: GitHub, GitLab 및 오픈소스 생태계에서 널리 쓰이는 **SHA-256**, **SHA-1**, **MD5**, **SHA-512** 해시 검증을 지원합니다. 순수 16진수 값, `sha256: <해시>`, 또는 리눅스 `sha256sum` 명령 출력 형식(`<해시>  <파일명>`)을 그대로 복사해서 붙여넣어도 자동으로 알고리즘을 감지하여 파일을 대조합니다. 일치 시 안전한 설치를 돕고, 불일치 시 설치 전 경고를 띄워 위변조 및 다운로드 손상을 방지하며, 계산된 해시값을 원터치로 복사할 수 있습니다.
 - **APK 서명 및 제작자 연속성 검증**: 다운로드된 APK의 X.509 서명 인증서를 추출하고 SHA-256 지문을 계산합니다. 기기에 이미 설치된 앱과의 서명 충돌(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`)을 사전 감지하고, 이전 다운로드 이력(TOFU 모델)과 대조하여 제작자 키 교체 여부를 경고합니다. 불일치 시 상세 내역과 함께 설치 취소 또는 무시하고 진행할 수 있는 선택형 경고 다이얼로그를 제공합니다.
+- **rete 시리즈 프리셋 기본 내장**: ReteGet, ReteClock, ReteKey(안드로이드 4.0+용, 그리고 안드로이드 9+용)가 GitHub 릴리즈용 버전 템플릿으로 들어 있고, 예상 SHA-256과 서명 키도 미리 채워져 있습니다. 기본 목록이 갱신되어도 직접 추가한 프리셋은 그대로 남습니다.
 - **프리셋 이름 지정 및 다운로드 이력 관리**: 프리셋마다 알아보기 쉬운 이름(예: *ReteGet*, *ReteClock*, *ReteKey*)을 붙일 수 있어 템플릿 주소만으로 구분이 안 되던 문제를 해결했습니다. 이름과 주소를 동시에 수정하는 다이얼로그(`✎`), 버전 자동 채우기 연동(`▲`), 순서 변경(`↑`/`↓`), 삭제 확인(`✕`), 일괄 선택 삭제를 지원합니다.
-- **원터치 APK 설치 연동**: `/sdcard/Download`로 `.apk` 파일 다운로드가 끝나면 즉시 시스템 패키지 인스톨러(`Intent.ACTION_VIEW` - `application/vnd.android.package-archive`) 호출 다이얼로그를 띄워 한 번의 탭으로 설치 화면으로 진입합니다.
+- **기본 다운로드 폴더에 저장**: 파일은 시스템의 기본 다운로드 폴더에 저장됩니다(안드로이드 2.3에서는 `/mnt/sdcard/Download`. 여기서 "sdcard"는 카드 슬롯이 없는 폰에서도 쓰는 공용 저장소의 이름입니다). 공용 저장소가 없거나 사용 중이면(예: USB로 PC에 연결된 동안) 앱 전용 저장소에 대신 저장하고 알려 주며, 그곳에서도 APK를 설치할 수 있습니다.
+- **원터치 APK 설치 연동**: `.apk` 파일 다운로드가 끝나면 즉시 시스템 패키지 인스톨러(`Intent.ACTION_VIEW` - `application/vnd.android.package-archive`) 호출 다이얼로그를 띄워 한 번의 탭으로 설치 화면으로 진입합니다.
 - **자체 서명 / 사설 SSL 우회 체크박스**: 홈랩이나 사내 테스트 서버의 자체 서명 인증서 환경을 위해 인증서 검증을 건너뛰는 옵션을 기본 제공합니다.
-- **초경량 단일 Dex**: 최종 APK 크기 87 KB 미만, 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
+- **초경량 단일 Dex**: 최종 APK 크기 약 115 KB, 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
 
 ## 대상 플랫폼 및 호환성
 
