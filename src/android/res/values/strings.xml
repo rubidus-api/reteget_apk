@@ -30,7 +30,7 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">Saved Presets</string>
-    <string name="lbl_presets_hint">Save (next to Download) keeps the URL above as a preset. Tap a preset (or Use) to load it back; Edit (or press and hold the preset) changes its name and URL; Up and Dn reorder; Del deletes.</string>
+    <string name="lbl_presets_hint">Save (next to Download) keeps the URL above as a preset. Tap a preset (or Use) to load it back; Edit (or press and hold the preset) changes its name and URL; Up and Dn reorder; Del deletes. Import and Export move all settings (presets, options, signing keys) through a file in the Download folder or the clipboard.</string>
     <string name="btn_add_preset">Save</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
@@ -92,4 +92,16 @@
     <string name="queue_url_label">from</string>
     <string name="btn_select_all">Select all</string>
     <string name="btn_select_none">Select none</string>
+    <string name="btn_import">Import</string>
+    <string name="btn_export">Export</string>
+    <string name="settings_exported">Settings saved to %1$s</string>
+    <string name="settings_copy_text">Copy text</string>
+    <string name="settings_copied">Settings copied to the clipboard</string>
+    <string name="settings_export_failed">Could not save the settings: %1$s</string>
+    <string name="settings_import_title">Import settings from</string>
+    <string name="settings_from_clipboard">Clipboard</string>
+    <string name="settings_no_files">No settings file in the Download folder; copy one there or use the clipboard.</string>
+    <string name="settings_import_confirm">Import %1$d presets (%2$d new, %3$d changed), the options and %4$d signing keys? Presets only on this phone stay.</string>
+    <string name="settings_imported">Settings imported</string>
+    <string name="settings_import_failed">Could not import: %1$s</string>
 </resources>

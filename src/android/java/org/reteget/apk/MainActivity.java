@@ -33,6 +33,7 @@ import org.reteget.core.ChecksumVerifier;
 import org.reteget.core.DownloadQueue;
 import org.reteget.core.DownloadTask;
 import org.reteget.core.PresetItem;
+import org.reteget.core.SettingsBundle;
 import org.reteget.core.TlsHelper;
 import org.reteget.core.UrlTemplate;
 
@@ -123,6 +124,7 @@ public class MainActivity extends Activity {
         setupUrlWatcher();
         setupUrlButtons();
         setupPresets();
+        setupSettingsTransfer();
         setupChecksumControls();
         setupDownloadControls();
         setupInstallControl();
@@ -622,6 +624,193 @@ public class MainActivity extends Activity {
                 editUrl.requestFocus();
             }
         });
+    }
+
+    // ------------------------------------------------------------------ settings export / import
+
+    private void setupSettingsTransfer() {
+        findViewById(R.id.btn_settings_export).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                exportSettings();
+            }
+        });
+        findViewById(R.id.btn_settings_import).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                chooseSettingsSource();
+            }
+        });
+    }
+
+    private SettingsBundle currentSettings() {
+        SettingsBundle b = new SettingsBundle();
+        try {
+            b.appVersion = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+            b.appVersion = "";
+        }
+        b.builtInTls = chkPureTls.isChecked();
+        b.presets.addAll(presetList);
+        SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        for (Map.Entry<String, ?> e : sp.getAll().entrySet()) {
+            if (e.getKey().startsWith("sig_fp_") && e.getValue() instanceof String) {
+                String pkg = e.getKey().substring("sig_fp_".length());
+                b.signers.put(pkg, new String[] { (String) e.getValue(), sp.getString("sig_auth_" + pkg, "") });
+            }
+        }
+        return b;
+    }
+
+    private void exportSettings() {
+        final String text = currentSettings().write();
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                .format(new java.util.Date());
+        File file = new File(chooseDownloadDir(), SettingsBundle.FILE_PREFIX + "-" + stamp + SettingsBundle.FILE_SUFFIX);
+        String message;
+        try {
+            java.io.OutputStream out = new java.io.FileOutputStream(file);
+            try {
+                out.write(text.getBytes("UTF-8"));
+            } finally {
+                out.close();
+            }
+            if (isPrivateDownload(file)) file.setReadable(true, false);
+            message = getString(R.string.settings_exported, file.getAbsolutePath());
+        } catch (Exception e) {
+            message = getString(R.string.settings_export_failed, String.valueOf(e.getMessage()));
+        }
+        new AlertDialog.Builder(this)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNeutralButton(R.string.settings_copy_text, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        copyToClipboard(text);
+                        Toast.makeText(MainActivity.this, R.string.settings_copied, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
+    }
+
+    /** Settings files in the Download folder (and the app-storage fallback), newest first. */
+    private List<File> settingsFiles() {
+        List<File> found = new ArrayList<File>();
+        File[] dirs = { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                new File(getFilesDir(), "downloads") };
+        for (File dir : dirs) {
+            File[] files = dir == null ? null : dir.listFiles();
+            if (files == null) continue;
+            for (File f : files) {
+                String n = f.getName().toLowerCase(java.util.Locale.US);
+                if (f.isFile() && n.startsWith(SettingsBundle.FILE_PREFIX)
+                        && (n.endsWith(".ini") || n.endsWith(".txt") || n.endsWith(".toml"))) {
+                    found.add(f);
+                }
+            }
+        }
+        java.util.Collections.sort(found, new java.util.Comparator<File>() {
+            @Override
+            public int compare(File a, File b) {
+                return a.lastModified() < b.lastModified() ? 1 : a.lastModified() > b.lastModified() ? -1 : 0;
+            }
+        });
+        return found.size() > 20 ? found.subList(0, 20) : found;
+    }
+
+    private void chooseSettingsSource() {
+        final List<File> files = settingsFiles();
+        final String[] items = new String[files.size() + 1];
+        for (int i = 0; i < files.size(); i++) items[i] = files.get(i).getName();
+        items[files.size()] = getString(R.string.settings_from_clipboard);
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle(R.string.settings_import_title);
+        if (files.isEmpty()) {
+            dialog.setMessage(getString(R.string.settings_no_files))
+                    .setPositiveButton(R.string.settings_from_clipboard, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface d, int which) {
+                            previewImport(readClipboard());
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null);
+        } else {
+            dialog.setItems(items, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface d, int which) {
+                    previewImport(which < files.size() ? readSmallFile(files.get(which)) : readClipboard());
+                }
+            }).setNegativeButton(android.R.string.cancel, null);
+        }
+        dialog.show();
+    }
+
+    private static String readSmallFile(File f) {
+        try {
+            if (f.length() > 1024 * 1024) return null;
+            java.io.InputStream in = new java.io.FileInputStream(f);
+            try {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) bytes.write(buf, 0, n);
+                return new String(bytes.toByteArray(), "UTF-8");
+            } finally {
+                in.close();
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Shows what the file holds and what will change, then applies it on confirmation. */
+    private void previewImport(String text) {
+        final SettingsBundle b;
+        try {
+            b = SettingsBundle.parse(text);
+        } catch (IllegalArgumentException e) {
+            Toast.makeText(this, getString(R.string.settings_import_failed, e.getMessage()), Toast.LENGTH_LONG).show();
+            return;
+        }
+        final SettingsBundle.Merge merge = SettingsBundle.mergePresets(presetList, b.presets);
+        StringBuilder msg = new StringBuilder(getString(R.string.settings_import_confirm,
+                b.presets.size(), merge.added, merge.updated, b.signers.size()));
+        if (!b.complaints.isEmpty()) {
+            msg.append("\n\n");
+            for (int i = 0; i < b.complaints.size() && i < 8; i++) msg.append("• ").append(b.complaints.get(i)).append('\n');
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.settings_import_title)
+                .setMessage(msg.toString())
+                .setPositiveButton(R.string.btn_import, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        applyImport(b, merge);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void applyImport(SettingsBundle b, SettingsBundle.Merge merge) {
+        presetList.clear();
+        presetList.addAll(merge.presets);
+        savePresets();
+        renderPresets();
+        if (b.builtInTls != null) {
+            chkPureTls.setChecked(b.builtInTls);   // its listener stores the choice
+        }
+        // Signing keys already recorded on this phone win: an imported file must not be able to
+        // replace a key this phone has seen with another one.
+        SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.Editor ed = sp.edit();
+        for (Map.Entry<String, String[]> e : b.signers.entrySet()) {
+            if (!sp.contains("sig_fp_" + e.getKey())) {
+                ed.putString("sig_fp_" + e.getKey(), e.getValue()[0]);
+                ed.putString("sig_auth_" + e.getKey(), e.getValue()[1]);
+            }
+        }
+        ed.commit();
+        Toast.makeText(this, R.string.settings_imported, Toast.LENGTH_SHORT).show();
     }
 
     @SuppressWarnings("deprecation")

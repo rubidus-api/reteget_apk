@@ -46,6 +46,7 @@ public class TestRunner {
         testPresetDefaultsAndMerge();
         testDownloadQueue();
         testIconResources();
+        testSettingsBundle();
 
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
@@ -616,6 +617,60 @@ public class TestRunner {
         } catch (Exception e) {
             assertTrue("icon resources: " + e, false);
         }
+    }
+
+    private static void testSettingsBundle() {
+        SettingsBundle b = new SettingsBundle();
+        b.appVersion = "0.3.2";
+        b.builtInTls = Boolean.TRUE;
+        b.presets.addAll(PresetItem.defaults());
+        b.presets.add(new PresetItem("Mirror \"A\" \\ 한글", "https://example.org/{1}/a.apk"));
+        b.signers.put("com.reteclock", new String[] { "90:44:6B", "reteclock" });
+        String file = b.write();
+        SettingsBundle r = SettingsBundle.parse(file);
+        assertEquals("settings: option survives", Boolean.TRUE, r.builtInTls);
+        assertEquals("settings: all presets survive", b.presets.size(), r.presets.size());
+        assertEquals("settings: quotes, backslash and Hangul in a name survive", "Mirror \"A\" \\ 한글", r.presets.get(4).name);
+        assertEquals("settings: preset record survives", PresetItem.defaults().get(1).toJson(), r.presets.get(1).toJson());
+        assertEquals("settings: signer survives", "reteclock", r.signers.get("com.reteclock")[1]);
+        assertTrue("settings: a file this wrote reads without complaints", r.complaints.isEmpty());
+
+        // Every line is in the INI and TOML subset: comment, [section], or key = true/false/int/"string".
+        java.util.regex.Pattern ok = java.util.regex.Pattern.compile(
+                "^(#.*|\\[[a-z0-9_-]+\\]|[a-z0-9_-]+ = (true|false|-?[0-9]+|\"([^\"\\\\]|\\\\[\\\\\"])*\"))?$");
+        boolean subset = !file.startsWith("\uFEFF") && file.indexOf('\r') < 0;
+        String firstSection = null;
+        for (String line : file.split("\n")) {
+            subset &= ok.matcher(line).matches();
+            if (firstSection == null && line.startsWith("[")) firstSection = line;
+            if (firstSection == null && line.contains(" = ")) subset = false;
+        }
+        assertTrue("settings: every written line is in the INI and TOML subset", subset);
+
+        String handEdited = "\uFEFF; my backup\r\n[Options]\r\nBuilt_In_TLS: yes\r\n\r\n"
+                + "[preset-7]\r\nName = My mirror\r\nURL = https://example.org/{1}.zip\r\ncolour = red\r\n"
+                + "[weather]\r\nsunny = true\r\n";
+        SettingsBundle h = SettingsBundle.parse(handEdited);
+        assertEquals("settings: a hand-edited file (case, colon, bare values, CRLF, BOM) still reads",
+                "My mirror|https://example.org/{1}.zip|true",
+                h.presets.get(0).name + "|" + h.presets.get(0).url + "|" + h.builtInTls);
+        assertEquals("settings: what cannot be understood is listed, not guessed (unknown key, unknown section)", 2, h.complaints.size());
+
+        List<PresetItem> current = new java.util.ArrayList<PresetItem>();
+        current.add(new PresetItem("Only here", "https://local/x.apk"));
+        current.add(new PresetItem("Old name", PresetItem.defaults().get(1).url));
+        SettingsBundle.Merge m = SettingsBundle.mergePresets(current, r.presets);
+        assertEquals("settings merge: phone-only preset kept first", "Only here", m.presets.get(0).name);
+        assertEquals("settings merge: matching URL takes the imported name", "ReteClock", m.presets.get(1).name);
+        assertEquals("settings merge: counts", "4 added, 1 updated", m.added + " added, " + m.updated + " updated");
+
+        boolean rejected = false;
+        try {
+            SettingsBundle.parse("{\"app\":\"other\"}");
+        } catch (IllegalArgumentException e) {
+            rejected = true;
+        }
+        assertTrue("settings: a file that is not ReteGet settings is refused", rejected);
     }
 
     private static void testPureGcmEncryptionDecryption() {

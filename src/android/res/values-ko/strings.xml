@@ -30,7 +30,7 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">저장된 프리셋 목록</string>
-    <string name="lbl_presets_hint">다운로드 옆의 저장은 위 주소를 프리셋으로 남깁니다. 항목을 누르거나 Use로 다시 불러오고, Edit(또는 항목 길게 누르기)로 이름·주소를 바꾸고, Up·Dn으로 순서를 바꾸고, Del로 지웁니다.</string>
+    <string name="lbl_presets_hint">다운로드 옆의 저장은 위 주소를 프리셋으로 남깁니다. 항목을 누르거나 Use로 다시 불러오고, Edit(또는 항목 길게 누르기)로 이름·주소를 바꾸고, Up·Dn으로 순서를 바꾸고, Del로 지웁니다. 가져오기·내보내기는 모든 설정(프리셋, 옵션, 서명 키)을 다운로드 폴더의 파일이나 클립보드로 옮깁니다.</string>
     <string name="btn_add_preset">저장</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
@@ -92,4 +92,16 @@
     <string name="queue_url_label">주소</string>
     <string name="btn_select_all">전체 선택</string>
     <string name="btn_select_none">선택 해제</string>
+    <string name="btn_import">가져오기</string>
+    <string name="btn_export">내보내기</string>
+    <string name="settings_exported">설정을 저장했습니다: %1$s</string>
+    <string name="settings_copy_text">텍스트 복사</string>
+    <string name="settings_copied">설정을 클립보드에 복사했습니다</string>
+    <string name="settings_export_failed">설정을 저장하지 못했습니다: %1$s</string>
+    <string name="settings_import_title">설정 가져오기</string>
+    <string name="settings_from_clipboard">클립보드</string>
+    <string name="settings_no_files">다운로드 폴더에 설정 파일이 없습니다. 파일을 그곳에 두거나 클립보드를 쓰세요.</string>
+    <string name="settings_import_confirm">프리셋 %1$d개(새 것 %2$d, 바뀐 것 %3$d), 옵션, 서명 키 %4$d개를 가져올까요? 이 폰에만 있는 프리셋은 그대로 남습니다.</string>
+    <string name="settings_imported">설정을 가져왔습니다</string>
+    <string name="settings_import_failed">가져오지 못했습니다: %1$s</string>
 </resources>

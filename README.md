@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.3.1** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.1/reteget-0.3.1.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.1)
+**ReteGet v0.3.2** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.2/reteget-0.3.2.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.2)
 
 **English** · [한국어](README.ko.md)
 
@@ -21,7 +21,7 @@ Download APKs, firmware images, and files directly on vintage devices without ne
   &nbsp;&nbsp;
   <img src="docs/screenshots/screenshot_template-0.3.1.png" alt="ReteGet URL template with the version field and the resolved URL on Android 2.3" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets-0.3.1.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
+  <img src="docs/screenshots/screenshot_presets-0.3.2.png" alt="ReteGet built-in rete presets with names, checksums and signers on Android 2.3" width="220">
 </p>
 
 ---
@@ -47,11 +47,12 @@ ReteGet is a dedicated, framework-only Android utility that bridges the gap, all
 - **APK Signature & Author Continuity Verification**: Automatically inspects the X.509 signing certificate of downloaded APKs and calculates its SHA-256 fingerprint. Verifies continuity against currently installed packages (preventing `INSTALL_FAILED_UPDATE_INCOMPATIBLE` signature conflicts) and previous download history (TOFU model). If author signing keys change or conflict, a clear warning dialog is displayed with an option to inspect details and override.
 - **Rete Series Presets Built In**: ReteGet, ReteClock and ReteKey (the Android 4.0+ build, plus the Android 9+ build) come as ready-made version templates for GitHub Releases, with the expected SHA-256 and signing key already filled in. Your own presets are kept when the built-in list is updated.
 - **Named Presets & History Management**: Give each preset a name (e.g. *ReteGet*, *ReteClock*) so template URLs are easy to tell apart. **Save** next to *Download* keeps the URL above as a preset. Each preset shows its name, URL and last download record in one wrapping paragraph, with short actions on top: **Use** (or tap the preset) loads it into the URL bar with the known version filled in, **Edit** (or press and hold) changes the name and URL, **Up**/**Dn** reorder, **Del** deletes; **Select all** and **Delete selected** work on the checked presets.
+- **Settings Export and Import**: **Export** writes all settings (presets, options, and the signing keys seen for each app) to `reteget-settings-<date>.ini` in the Download folder and can copy the same text to the clipboard; **Import** reads such a file or the clipboard, shows what will change, and merges it: presets match by URL, presets only on this phone stay, and a signing key already recorded on this phone is never replaced. The file is plain text in the subset of INI and TOML that both read the same way (the rete family's settings format), so it can be read and edited by hand.
 - **Paste and Clear**: next to *Target URL* and *Expected Checksum*, **Paste** takes the text from the clipboard and **Clear** empties the field.
 - **Saves to the Download Folder**: Files go to the system Download folder (on Android 2.3 this is `/mnt/sdcard/Download`; "sdcard" is the name of the shared storage even on phones without a card slot). If shared storage is missing or busy (for example while mounted on a PC over USB), ReteGet saves into its own app storage instead, tells you so, and can still install APKs from there.
 - **One-Touch APK Installation**: Once an `.apk` file finishes downloading, ReteGet immediately prompts to launch the system package installer (`Intent.ACTION_VIEW` with MIME type `application/vnd.android.package-archive`).
 - **Unverified SSL Bypass Option**: Includes an optional checkbox to allow unverified or self-signed certificates when downloading from local test servers or home labs.
-- **Ultra-Lightweight & Single-Dex**: About 164 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
+- **Ultra-Lightweight & Single-Dex**: About 173 KB APK size, single dex file, zero third-party libraries, and built without Gradle.
 
 ## Target Platform & Compatibility
 
