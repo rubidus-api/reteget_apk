@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ReteGet</string>
+    <string name="url_hint">다운로드 주소 입력 (http, https, ftp)</string>
+    <string name="btn_download">다운로드</string>
+    <string name="btn_cancel">취소</string>
+    <string name="btn_install">APK 설치</string>
+    <string name="btn_save_preset">현재 주소 저장</string>
+    <string name="btn_delete_preset">선택 항목 삭제</string>
+    <string name="lbl_presets">미리 저장된 주소:</string>
+    <string name="lbl_templates">템플릿 변수:</string>
+    <string name="chk_insecure">인증서 검증 건너뛰기 (자체 서명/구형 SSL 허용)</string>
+    <string name="status_idle">다운로드 준비 완료.</string>
+    <string name="status_downloading">다운로드 중…</string>
+    <string name="status_success">다운로드 완료!</string>
+    <string name="status_error">다운로드 실패: %s</string>
+</resources>

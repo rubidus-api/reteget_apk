@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ReteGet</string>
+    <string name="url_hint">Enter download URL (http, https, ftp)</string>
+    <string name="btn_download">Download</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_install">Install APK</string>
+    <string name="btn_save_preset">Save Current</string>
+    <string name="btn_delete_preset">Delete Selected</string>
+    <string name="lbl_presets">Preset URLs:</string>
+    <string name="lbl_templates">Template Variables:</string>
+    <string name="chk_insecure">Allow unverified SSL / self-signed certs</string>
+    <string name="status_idle">Ready to download.</string>
+    <string name="status_downloading">Downloading…</string>
+    <string name="status_success">Download complete!</string>
+    <string name="status_error">Download failed: %s</string>
+</resources>

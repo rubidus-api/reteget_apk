@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/lbl_presets"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:paddingTop="4dp" />
+
+        <Spinner
+            android:id="@+id/spinner_presets"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp" />
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btn_save_preset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_save_preset"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btn_delete_preset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_delete_preset"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="Target URL:"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#333333" />
+
+        <EditText
+            android:id="@+id/edit_url"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/url_hint"
+            android:singleLine="false"
+            android:maxLines="4"
+            android:textSize="13sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Container for dynamically added template variable fields ({1}, {2}, etc.) -->
+        <LinearLayout
+            android:id="@+id/layout_variables"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/lbl_templates"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#006699"
+                android:paddingBottom="4dp" />
+
+            <LinearLayout
+                android:id="@+id/variables_fields"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/txt_resolved_preview"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#555555"
+                android:paddingTop="4dp" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/chk_insecure_ssl"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/chk_insecure"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btn_download"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:text="@string/btn_download"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btn_cancel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_cancel"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:id="@+id/txt_progress_details"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:visibility="gone"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:id="@+id/txt_status"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/status_idle"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:paddingBottom="12dp" />
+
+        <Button
+            android:id="@+id/btn_install"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_install"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+</ScrollView>

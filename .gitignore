@@ -1,34 +1,41 @@
-# Gradle files
-.gradle/
+# Allowlist: this repository publishes only what a person needs to build the app,
+# plus the README and the screenshots it shows. Everything else — working notes,
+# operating docs, plans, test scaffolding, private material, build output, release
+# artifacts (they live on the Releases page) — stays local or in the private sidecar.
+#
+# Ignore everything, then re-allow the public surface, so a new file is never
+# published by accident.
+
+/*
+
+!/.gitignore
+!/README.md
+!/README.ko.md
+!/LICENSE
+
+# Sources and resources needed to compile the APK.
+!/src/
+
+# Build scripts needed to produce the APK.
+!/scripts/
+/scripts/*
+!/scripts/env.sh
+!/scripts/build.sh
+!/scripts/test.sh
+!/scripts/add-to-zip.py
+!/scripts/emulator.sh
+!/scripts/verify-kitkat.sh
+
+# The screenshots the README embeds.
+!/docs/
+/docs/*
+!/docs/screenshots/
+
+# Tests
+!/tests/
+
+# Build outputs
 build/
-
-# Local configuration file (sdk path, etc)
-local.properties
-
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
-*.iml
-.idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
-
-# Keystore files
-*.jks
+dist/
 *.keystore
-
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
-*.hprof
+scripts/env.local.sh
