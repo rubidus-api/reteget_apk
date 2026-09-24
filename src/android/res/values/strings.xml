@@ -8,7 +8,7 @@
     <string name="btn_install">Install APK</string>
     <string name="lbl_templates">Template Variables:</string>
     <string name="chk_insecure">Allow unverified SSL / self-signed certs</string>
-    <string name="chk_pure_tls">Use the built-in TLS 1.3/1.2 engine (for old Android: 2.3, Galaxy Note 2)</string>
+    <string name="chk_pure_tls">Use the built-in TLS 1.3/1.2 engine</string>
     <string name="status_idle">Ready to download.</string>
     <string name="status_downloading">Downloading…</string>
     <string name="status_success">Download complete!</string>
@@ -30,8 +30,8 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">Saved Presets</string>
-    <string name="lbl_presets_hint">Tap any preset below to load it into the URL bar above:</string>
-    <string name="btn_add_preset">+ Save Current URL</string>
+    <string name="lbl_presets_hint">Save (next to Download) keeps the URL above as a preset. Tap a preset (or Use) to load it back; Edit (or press and hold the preset) changes its name and URL; Up and Dn reorder; Del deletes.</string>
+    <string name="btn_add_preset">Save</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
     <string name="btn_move_up">↑</string>
@@ -39,7 +39,7 @@
     <string name="btn_delete">Delete</string>
     <string name="chk_select_all">Select all</string>
     <string name="btn_delete_selected">Delete Selected (%1$d)</string>
-    <string name="dialog_edit_preset_title">Edit Preset</string>
+    <string name="dialog_edit_preset_title">Edit name and URL</string>
     <string name="dialog_edit_preset_name_label">Name:</string>
     <string name="dialog_edit_preset_name_hint">Preset name (e.g. ReteGet)</string>
     <string name="dialog_edit_preset_url_label">Download URL:</string>
@@ -80,9 +80,16 @@
     <string name="queue_interrupted">Interrupted when the app was closed</string>
     <string name="queue_cancel">Cancel</string>
     <string name="queue_retry">Retry</string>
-    <string name="queue_remove">Remove</string>
+    <string name="queue_remove">Del</string>
     <string name="queue_install">Install</string>
     <string name="queue_added">Added to the download queue</string>
     <string name="queue_file_missing">The file is no longer there</string>
     <string name="queue_connecting">Connecting…</string>
+    <string name="queue_warn_checksum">checksum mismatch</string>
+    <string name="queue_warn_signature">signing key differs</string>
+    <string name="btn_paste">Paste</string>
+    <string name="btn_clear_url">Clear</string>
+    <string name="toast_clipboard_empty">The clipboard is empty</string>
+    <string name="queue_delete_selected">Del selected (%1$d)</string>
+    <string name="queue_url_label">from</string>
 </resources>

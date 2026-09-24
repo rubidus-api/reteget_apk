@@ -48,6 +48,13 @@
                     android:textColor="#006699" />
 
                 <Button
+                    android:id="@+id/btn_queue_delete_selected"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <Button
                     android:id="@+id/btn_queue_clear"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -62,14 +69,35 @@
                 android:orientation="vertical" />
         </LinearLayout>
 
-        <TextView
+        <LinearLayout
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:text="@string/target_url"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:paddingTop="4dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/target_url"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#333333" />
+
+            <Button
+                android:id="@+id/btn_paste_url"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_paste" />
+
+            <Button
+                android:id="@+id/btn_clear_url"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="4dp"
+                android:text="@string/btn_clear_url" />
+        </LinearLayout>
 
         <EditText
             android:id="@+id/edit_url"
@@ -178,6 +206,14 @@
                 android:layout_weight="2"
                 android:text="@string/btn_download"
                 android:textStyle="bold" />
+
+            <!-- Saves the URL above (template and version) as a preset. -->
+            <Button
+                android:id="@+id/btn_add_preset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_add_preset" />
 
             <Button
                 android:id="@+id/btn_cancel"
@@ -333,13 +369,6 @@
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:textColor="#333333" />
-
-                <Button
-                    android:id="@+id/btn_add_preset"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/btn_add_preset"
-                    android:textSize="11sp" />
             </LinearLayout>
 
             <TextView

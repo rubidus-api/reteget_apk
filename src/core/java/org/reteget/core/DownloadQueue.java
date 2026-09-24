@@ -155,6 +155,9 @@ public final class DownloadQueue {
         t.bytesTotal = -1;
         t.bytesPerSec = 0;
         t.finishedAt = 0;
+        t.verified = false;
+        t.sha256 = null;
+        t.warning = null;
         persist();
         changed(t);
         startNext();
@@ -188,6 +191,17 @@ public final class DownloadQueue {
             changed(null);
         }
         return n;
+    }
+
+    /** Records the result of the post-download checks (checksum, APK signature) for a DONE entry. */
+    public synchronized void markVerified(long id, String sha256, String warning) {
+        DownloadTask t = find(id);
+        if (t == null || t.state != DownloadTask.State.DONE) return;
+        t.verified = true;
+        t.sha256 = sha256;
+        t.warning = warning;
+        persist();
+        changed(t);
     }
 
     public synchronized boolean isBusy() {

@@ -99,6 +99,8 @@ public class MainActivity extends Activity {
     private LinearLayout layoutQueueSection;
     private LinearLayout layoutQueueList;
     private Button btnQueueClear;
+    private Button btnQueueDeleteSelected;
+    private final java.util.Set<Long> selectedQueueIds = new java.util.HashSet<Long>();
     private File lastDownloadedFile;
     private String lastComputedSha256 = null;
     private boolean hasChecksumMismatch = false;
@@ -118,6 +120,7 @@ public class MainActivity extends Activity {
         bindViews();
         // The URL watcher creates the template fields that setupPresets() fills in.
         setupUrlWatcher();
+        setupUrlButtons();
         setupPresets();
         setupChecksumControls();
         setupDownloadControls();
@@ -195,6 +198,7 @@ public class MainActivity extends Activity {
         layoutQueueSection = (LinearLayout) findViewById(R.id.layout_queue_section);
         layoutQueueList = (LinearLayout) findViewById(R.id.layout_queue_list);
         btnQueueClear = (Button) findViewById(R.id.btn_queue_clear);
+        btnQueueDeleteSelected = (Button) findViewById(R.id.btn_queue_delete_selected);
         progressBar = (ProgressBar) findViewById(R.id.progress_bar);
         txtProgressDetails = (TextView) findViewById(R.id.txt_progress_details);
         txtStatus = (TextView) findViewById(R.id.txt_status);
@@ -363,42 +367,57 @@ public class MainActivity extends Activity {
                 }
             });
 
-            View contentLayout = row.findViewById(R.id.layout_preset_content);
-            TextView txtName = (TextView) row.findViewById(R.id.txt_preset_name);
-            TextView txtUrl = (TextView) row.findViewById(R.id.txt_preset_url);
-            TextView txtMeta = (TextView) row.findViewById(R.id.txt_preset_meta);
+            // Name / URL / record, as one paragraph that wraps across the full width.
+            TextView body = (TextView) row.findViewById(R.id.txt_preset_body);
+            android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+            String name = item.getDisplayName();
+            sb.append(name);
+            sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, name.length(), 0);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF1A237E), 0, name.length(), 0);
+            sb.setSpan(new android.text.style.RelativeSizeSpan(1.15f), 0, name.length(), 0);
+            sb.append("  /  ");
+            int urlStart = sb.length();
+            sb.append(item.url);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF0277BD), urlStart, sb.length(), 0);
+            String meta = item.getMetadataSummary();
+            if (meta != null && meta.length() > 0) {
+                sb.append("  /  ").append(meta.replace("\n", " · "));
+            }
+            body.setText(sb);
 
-            txtName.setText(item.getDisplayName());
-            txtUrl.setText(item.url);
-            txtMeta.setText(item.getMetadataSummary());
-
-            View.OnClickListener useListener = new View.OnClickListener() {
+            body.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     selectAndLoadPreset(item, true);
                 }
-            };
+            });
+            // Press and hold a preset to change its name (title) and URL, same as Edit.
+            body.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    promptEditPresetDialog(item);
+                    return true;
+                }
+            });
 
-            contentLayout.setOnClickListener(useListener);
-            txtName.setOnClickListener(useListener);
-            txtUrl.setOnClickListener(useListener);
+            row.findViewById(R.id.btn_use).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectAndLoadPreset(item, true);
+                }
+            });
 
-            Button btnUse = (Button) row.findViewById(R.id.btn_use);
-            btnUse.setOnClickListener(useListener);
-
-            Button btnEdit = (Button) row.findViewById(R.id.btn_edit);
-            btnEdit.setOnClickListener(new View.OnClickListener() {
+            row.findViewById(R.id.btn_edit).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     promptEditPresetDialog(item);
                 }
             });
 
-            Button btnMoveUp = (Button) row.findViewById(R.id.btn_move_up);
+            TextView btnMoveUp = (TextView) row.findViewById(R.id.btn_move_up);
             if (index == 0) {
-                btnMoveUp.setEnabled(false);
+                disableAction(btnMoveUp);
             } else {
-                btnMoveUp.setEnabled(true);
                 btnMoveUp.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -410,11 +429,10 @@ public class MainActivity extends Activity {
                 });
             }
 
-            Button btnMoveDown = (Button) row.findViewById(R.id.btn_move_down);
+            TextView btnMoveDown = (TextView) row.findViewById(R.id.btn_move_down);
             if (index == presetList.size() - 1) {
-                btnMoveDown.setEnabled(false);
+                disableAction(btnMoveDown);
             } else {
-                btnMoveDown.setEnabled(true);
                 btnMoveDown.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -426,8 +444,7 @@ public class MainActivity extends Activity {
                 });
             }
 
-            Button btnDelete = (Button) row.findViewById(R.id.btn_delete);
-            btnDelete.setOnClickListener(new View.OnClickListener() {
+            row.findViewById(R.id.btn_delete).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     promptDeleteSinglePresetDialog(item, index);
@@ -436,6 +453,13 @@ public class MainActivity extends Activity {
 
             layoutPresetsList.addView(row);
         }
+    }
+
+    private static void disableAction(TextView action) {
+        action.setEnabled(false);
+        action.setClickable(false);
+        action.setFocusable(false);
+        action.setTextColor(0xFFCFD8DC);
     }
 
     private void updateBatchSelectionState() {
@@ -596,6 +620,47 @@ public class MainActivity extends Activity {
             sb.append(p.toJson()).append("\n");
         }
         sp.edit().putString(KEY_PRESETS, sb.toString()).commit();
+    }
+
+    private void setupUrlButtons() {
+        findViewById(R.id.btn_paste_url).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String text = readClipboard();
+                if (text == null || text.trim().length() == 0) {
+                    Toast.makeText(MainActivity.this, R.string.toast_clipboard_empty, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                editUrl.setText(text.trim());
+                editUrl.setSelection(editUrl.getText().length());
+            }
+        });
+        findViewById(R.id.btn_clear_url).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editUrl.setText("");
+                editUrl.requestFocus();
+            }
+        });
+    }
+
+    @SuppressWarnings("deprecation")
+    private String readClipboard() {
+        try {
+            if (Build.VERSION.SDK_INT >= 11) {
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (cm == null || !cm.hasPrimaryClip() || cm.getPrimaryClip().getItemCount() == 0) return null;
+                CharSequence t = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+                return t == null ? null : t.toString();
+            }
+            android.text.ClipboardManager cm =
+                    (android.text.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            CharSequence t = cm == null ? null : cm.getText();
+            return t == null ? null : t.toString();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void setupUrlWatcher() {
@@ -899,29 +964,31 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void onTaskCompleted(final DownloadTask task) {
-                // Hash off the UI thread, then run the usual checks and install prompt.
-                final File file = new File(task.filePath);
-                String sha;
-                try {
-                    sha = ChecksumVerifier.computeHash(file, "SHA-256");
-                } catch (Exception e) {
-                    sha = "Error computing hash: " + e.getMessage();
-                }
-                final String hash = sha;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        renderQueue();
-                        handleCompletedDownload(task, file, hash);
-                    }
-                });
+            public void onTaskCompleted(DownloadTask task) {
+                verifyCompleted(task);
             }
         });
+        // Downloads that finished while no screen was listening (e.g. during a rotation) still
+        // get their checksum/signature checks and install prompt.
+        for (DownloadTask t : sQueue.snapshot()) {
+            if (t.state == DownloadTask.State.DONE && !t.verified) {
+                verifyCompleted(t);
+            }
+        }
         btnQueueClear.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 sQueue.clearFinished();
+            }
+        });
+        btnQueueDeleteSelected.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                for (Long id : new ArrayList<Long>(selectedQueueIds)) {
+                    sQueue.remove(id);
+                }
+                selectedQueueIds.clear();
+                renderQueue();
             }
         });
         renderQueue();
@@ -933,6 +1000,51 @@ public class MainActivity extends Activity {
             sQueue.setListener(null);
         }
         super.onDestroy();
+    }
+
+    private static final java.util.Set<Long> sVerifying = new java.util.HashSet<Long>();
+
+    /** Hashes off the UI thread, then runs the checks and install prompt on it. Once per entry. */
+    private void verifyCompleted(final DownloadTask task) {
+        synchronized (sVerifying) {
+            if (!sVerifying.add(task.id)) return;
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final File file = new File(task.filePath);
+                String sha = null;
+                if (file.exists()) {
+                    try {
+                        sha = ChecksumVerifier.computeHash(file, "SHA-256");
+                    } catch (Exception e) {
+                        sha = null;
+                    }
+                }
+                final String hash = sha;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            if (!file.exists()) {
+                                // Only a verdict when the storage is actually there; right after
+                                // boot, or while mounted on a PC, shared storage may be missing.
+                                if (isPrivateDownload(file) || Environment.MEDIA_MOUNTED.equals(
+                                        Environment.getExternalStorageState())) {
+                                    sQueue.markVerified(task.id, null, DownloadTask.WARN_MISSING);
+                                }
+                            } else {
+                                handleCompletedDownload(task, file, hash);
+                            }
+                        } finally {
+                            synchronized (sVerifying) {
+                                sVerifying.remove(task.id);
+                            }
+                        }
+                    }
+                });
+            }
+        }, "VerifyThread").start();
     }
 
     private void handleCompletedDownload(DownloadTask task, File destinationFile, String sha256) {
@@ -959,6 +1071,7 @@ public class MainActivity extends Activity {
         if (destinationFile.getName().toLowerCase().endsWith(".apk")) {
             btnInstall.setVisibility(View.VISIBLE);
             verifyApkSignature(destinationFile);
+            sQueue.markVerified(task.id, sha256, warningsFor(hasChecksumMismatch, hasSignatureMismatch));
             updatePresetDownloadRecord(destinationFile, task.template, task.url, task.version);
             if (hasChecksumMismatch) {
                 // Keep visible for manual install button review
@@ -968,9 +1081,17 @@ public class MainActivity extends Activity {
                 promptAutoInstall(destinationFile);
             }
         } else {
+            sQueue.markVerified(task.id, sha256, warningsFor(hasChecksumMismatch, false));
             updatePresetDownloadRecord(destinationFile, task.template, task.url, task.version);
             Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private static String warningsFor(boolean checksum, boolean signature) {
+        if (checksum && signature) return DownloadTask.WARN_CHECKSUM + "," + DownloadTask.WARN_SIGNATURE;
+        if (checksum) return DownloadTask.WARN_CHECKSUM;
+        if (signature) return DownloadTask.WARN_SIGNATURE;
+        return null;
     }
 
     /** Rows shown: running and waiting entries in queue order, then finished ones, newest first. */
@@ -990,119 +1111,164 @@ public class MainActivity extends Activity {
             anyFinished |= !t.isActive();
             layoutQueueList.addView(buildQueueRow(t));
         }
+        java.util.Set<Long> present = new java.util.HashSet<Long>();
+        for (DownloadTask t : ordered) present.add(t.id);
+        selectedQueueIds.retainAll(present);
         layoutQueueSection.setVisibility(ordered.isEmpty() ? View.GONE : View.VISIBLE);
         btnQueueClear.setVisibility(anyFinished ? View.VISIBLE : View.GONE);
+        updateQueueSelectionButton();
         btnCancel.setEnabled(sQueue.isBusy());
     }
 
     private static final class QueueRow {
         DownloadTask.State state;
-        TextView status;
+        String warning;
+        TextView body;
         ProgressBar progress;
     }
 
     private final Map<Long, QueueRow> queueRows = new HashMap<Long, QueueRow>();
 
+    private void updateQueueSelectionButton() {
+        int n = selectedQueueIds.size();
+        btnQueueDeleteSelected.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
+        btnQueueDeleteSelected.setText(getString(R.string.queue_delete_selected, n));
+    }
+
     /** Updates progress in place; returns false when the row must be rebuilt. */
     private boolean updateQueueRow(DownloadTask t) {
         QueueRow row = queueRows.get(t.id);
         if (row == null || row.state != t.state) return false;
-        row.status.setText(queueStatusText(t));
+        if (row.warning == null ? t.warning != null : !row.warning.equals(t.warning)) return false;
+        row.body.setText(queueBody(t));
         applyProgress(row.progress, t);
         return true;
     }
 
+    /** File name / state / URL as one paragraph, like a preset. */
+    private CharSequence queueBody(DownloadTask t) {
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        String name = t.displayName();
+        sb.append(name);
+        sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, name.length(), 0);
+        sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF263238), 0, name.length(), 0);
+        sb.append("  /  ");
+        int st = sb.length();
+        sb.append(queueStatusText(t));
+        int colour = t.state == DownloadTask.State.FAILED ? 0xFFCC0000
+                : t.state == DownloadTask.State.DONE && t.warning != null ? 0xFFE65100
+                : t.state == DownloadTask.State.DONE ? 0xFF2E7D32 : 0xFF555555;
+        sb.setSpan(new android.text.style.ForegroundColorSpan(colour), st, sb.length(), 0);
+        sb.append("  /  ");
+        int us = sb.length();
+        sb.append(t.url);
+        sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF0277BD), us, sb.length(), 0);
+        sb.setSpan(new android.text.style.RelativeSizeSpan(0.9f), us, sb.length(), 0);
+        return sb;
+    }
+
     private View buildQueueRow(final DownloadTask t) {
-        float d = getResources().getDisplayMetrics().density;
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(0, (int) (6 * d), 0, (int) (6 * d));
+        View row = LayoutInflater.from(this).inflate(R.layout.item_queue, layoutQueueList, false);
+        CheckBox chk = (CheckBox) row.findViewById(R.id.chk_queue_select);
+        chk.setChecked(selectedQueueIds.contains(t.id));
+        chk.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked) selectedQueueIds.add(t.id); else selectedQueueIds.remove(t.id);
+                updateQueueSelectionButton();
+            }
+        });
 
-        TextView name = new TextView(this);
-        name.setText(t.displayName());
-        name.setTextSize(14);
-        name.setTypeface(null, android.graphics.Typeface.BOLD);
-        name.setTextColor(0xFF333333);
-        row.addView(name);
-
-        TextView status = new TextView(this);
-        status.setText(queueStatusText(t));
-        status.setTextSize(12);
-        status.setTextColor(t.state == DownloadTask.State.FAILED ? 0xFFCC0000
-                : t.state == DownloadTask.State.DONE ? 0xFF2E7D32 : 0xFF555555);
-        row.addView(status);
-
-        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(100);
-        applyProgress(progress, t);
-        row.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(android.view.Gravity.RIGHT);
+        LinearLayout buttons = (LinearLayout) row.findViewById(R.id.layout_queue_actions);
         switch (t.state) {
             case QUEUED:
             case RUNNING:
-                addQueueButton(buttons, R.string.queue_cancel, new Runnable() {
+                addQueueButton(buttons, R.string.queue_cancel, false, new Runnable() {
                     public void run() { sQueue.cancel(t.id); }
                 });
                 break;
             case FAILED:
             case CANCELLED:
-                addQueueButton(buttons, R.string.queue_retry, new Runnable() {
+                addQueueButton(buttons, R.string.queue_retry, false, new Runnable() {
                     public void run() { sQueue.retry(t.id); }
                 });
-                addQueueButton(buttons, R.string.queue_remove, new Runnable() {
+                addQueueButton(buttons, R.string.queue_remove, true, new Runnable() {
                     public void run() { sQueue.remove(t.id); }
                 });
                 break;
             case DONE:
                 if (t.fileName != null && t.fileName.toLowerCase().endsWith(".apk")) {
-                    addQueueButton(buttons, R.string.queue_install, new Runnable() {
-                        public void run() {
-                            File f = new File(t.filePath);
-                            if (f.exists()) {
-                                launchApkInstaller(f);
-                            } else {
-                                Toast.makeText(MainActivity.this, R.string.queue_file_missing, Toast.LENGTH_SHORT).show();
-                            }
-                        }
+                    addQueueButton(buttons, R.string.queue_install, false, new Runnable() {
+                        public void run() { installFromQueue(t); }
                     });
                 }
-                addQueueButton(buttons, R.string.queue_remove, new Runnable() {
+                addQueueButton(buttons, R.string.queue_remove, true, new Runnable() {
                     public void run() { sQueue.remove(t.id); }
                 });
                 break;
         }
-        row.addView(buttons, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.FILL_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView body = (TextView) row.findViewById(R.id.txt_queue_body);
+        body.setText(queueBody(t));
+        ProgressBar progress = (ProgressBar) row.findViewById(R.id.progress_queue);
+        applyProgress(progress, t);
 
         QueueRow qr = new QueueRow();
         qr.state = t.state;
-        qr.status = status;
+        qr.warning = t.warning;
+        qr.body = body;
         qr.progress = progress;
         queueRows.put(t.id, qr);
         return row;
     }
 
-    private void addQueueButton(LinearLayout parent, int text, final Runnable action) {
-        Button b = new Button(this);
+    private void installFromQueue(DownloadTask t) {
+        File f = new File(t.filePath);
+        if (!f.exists()) {
+            Toast.makeText(MainActivity.this, R.string.queue_file_missing, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Same warnings as right after the download. The signature is read again so the
+        // dialog can name both certificates after a restart.
+        if (t.hasWarning(DownloadTask.WARN_SIGNATURE)) {
+            verifyApkSignature(f);
+        }
+        hasSignatureMismatch = t.hasWarning(DownloadTask.WARN_SIGNATURE);
+        if (t.hasWarning(DownloadTask.WARN_CHECKSUM)) {
+            promptChecksumMismatchDialog(f);
+        } else if (hasSignatureMismatch) {
+            promptSignatureMismatchDialog(f);
+        } else {
+            launchApkInstaller(f);
+        }
+    }
+
+    /** A flat word-button like the preset actions. */
+    private void addQueueButton(LinearLayout parent, int text, boolean danger, final Runnable action) {
+        TextView b = new TextView(this, null, 0);
         b.setText(text);
-        b.setTextSize(12);
+        b.setTextSize(14);
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+        b.setTextColor(danger ? 0xFFC62828 : 0xFF37474F);
+        b.setGravity(android.view.Gravity.CENTER);
+        float d = getResources().getDisplayMetrics().density;
+        b.setPadding((int) (7 * d), 0, (int) (7 * d), 0);
+        b.setMinWidth((int) (40 * d));
+        b.setBackgroundResource(android.R.drawable.list_selector_background);
+        b.setClickable(true);
+        b.setFocusable(true);
         b.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 action.run();
             }
         });
-        parent.addView(b);
+        parent.addView(b, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (int) (40 * d)));
     }
 
     private static void applyProgress(ProgressBar bar, DownloadTask t) {
         int pct = t.percent();
-        boolean show = t.state == DownloadTask.State.RUNNING || t.state == DownloadTask.State.DONE;
-        bar.setVisibility(show ? View.VISIBLE : View.GONE);
+        bar.setVisibility(t.state == DownloadTask.State.RUNNING ? View.VISIBLE : View.GONE);
         bar.setIndeterminate(t.state == DownloadTask.State.RUNNING && pct < 0);
         if (pct >= 0) bar.setProgress(pct);
     }
@@ -1128,6 +1294,9 @@ public class MainActivity extends Activity {
                 break;
             case DONE:
                 sb.append(getString(R.string.queue_done)).append(" · ").append(formatBytes(t.bytesDone));
+                if (t.hasWarning(DownloadTask.WARN_CHECKSUM)) sb.append(" · ").append(getString(R.string.queue_warn_checksum));
+                if (t.hasWarning(DownloadTask.WARN_SIGNATURE)) sb.append(" · ").append(getString(R.string.queue_warn_signature));
+                if (t.hasWarning(DownloadTask.WARN_MISSING)) sb.append(" · ").append(getString(R.string.queue_file_missing));
                 break;
             case FAILED:
                 sb.append(getString(R.string.queue_failed)).append(": ").append(

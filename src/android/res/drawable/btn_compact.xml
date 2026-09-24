@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A flat button about 1.2x the height of its text: the stock 2.3 button is a 9-patch with a 48dp
+     minimum height and wide insets, which made every button in this app tall. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape>
+            <solid android:color="#FFF4F6F7" />
+            <stroke android:width="1dp" android:color="#FFDDE3E6" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape>
+            <solid android:color="#FFC5D3DC" />
+            <stroke android:width="1dp" android:color="#FF78909C" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="#FFE8EDF0" />
+            <stroke android:width="2dp" android:color="#FFFF9800" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="#FFE8EDF0" />
+            <stroke android:width="1dp" android:color="#FFB0BEC5" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+</selector>

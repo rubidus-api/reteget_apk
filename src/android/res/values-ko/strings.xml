@@ -8,7 +8,7 @@
     <string name="btn_install">APK 설치</string>
     <string name="lbl_templates">템플릿 변수:</string>
     <string name="chk_insecure">인증서 검증 건너뛰기 (자체 서명/구형 SSL 허용)</string>
-    <string name="chk_pure_tls">내장 TLS 1.3/1.2 엔진 사용 (구형 안드로이드: 2.3, 갤럭시 노트 2)</string>
+    <string name="chk_pure_tls">내장 TLS 1.3/1.2 엔진 사용</string>
     <string name="status_idle">다운로드 준비 완료.</string>
     <string name="status_downloading">다운로드 중…</string>
     <string name="status_success">다운로드 완료!</string>
@@ -30,8 +30,8 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">저장된 프리셋 목록</string>
-    <string name="lbl_presets_hint">아래 항목을 터치하면 위쪽 주소창으로 즉시 불러옵니다:</string>
-    <string name="btn_add_preset">+ 현재 주소 저장</string>
+    <string name="lbl_presets_hint">다운로드 옆의 저장은 위 주소를 프리셋으로 남깁니다. 항목을 누르거나 Use로 다시 불러오고, Edit(또는 항목 길게 누르기)로 이름·주소를 바꾸고, Up·Dn으로 순서를 바꾸고, Del로 지웁니다.</string>
+    <string name="btn_add_preset">저장</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
     <string name="btn_move_up">↑</string>
@@ -39,7 +39,7 @@
     <string name="btn_delete">삭제</string>
     <string name="chk_select_all">전체 선택</string>
     <string name="btn_delete_selected">선택 삭제 (%1$d)</string>
-    <string name="dialog_edit_preset_title">프리셋 수정</string>
+    <string name="dialog_edit_preset_title">이름·주소 편집</string>
     <string name="dialog_edit_preset_name_label">이름:</string>
     <string name="dialog_edit_preset_name_hint">프리셋 이름 (예: ReteGet)</string>
     <string name="dialog_edit_preset_url_label">다운로드 주소:</string>
@@ -78,11 +78,18 @@
     <string name="queue_failed">실패</string>
     <string name="queue_cancelled">취소됨</string>
     <string name="queue_interrupted">앱이 닫혀서 중단됨</string>
-    <string name="queue_cancel">취소</string>
-    <string name="queue_retry">다시 시도</string>
-    <string name="queue_remove">삭제</string>
-    <string name="queue_install">설치</string>
+    <string name="queue_cancel">Cancel</string>
+    <string name="queue_retry">Retry</string>
+    <string name="queue_remove">Del</string>
+    <string name="queue_install">Install</string>
     <string name="queue_added">다운로드 큐에 추가했습니다</string>
     <string name="queue_file_missing">파일이 더 이상 없습니다</string>
     <string name="queue_connecting">연결 중…</string>
+    <string name="queue_warn_checksum">체크섬 불일치</string>
+    <string name="queue_warn_signature">서명 키가 다름</string>
+    <string name="btn_paste">붙여넣기</string>
+    <string name="btn_clear_url">지우기</string>
+    <string name="toast_clipboard_empty">클립보드가 비어 있습니다</string>
+    <string name="queue_delete_selected">선택 삭제 (%1$d)</string>
+    <string name="queue_url_label">주소</string>
 </resources>

@@ -507,6 +507,15 @@ public class TestRunner {
         q.retry(f.id);
         assertTrue("queue: retry runs the entry again", engines.started == before + 1);
 
+        DownloadTask doneA = q.snapshot().get(0);
+        assertTrue("queue: a finished entry starts unverified", !doneA.verified);
+        q.markVerified(a.id, "abcd", DownloadTask.WARN_CHECKSUM + "," + DownloadTask.WARN_SIGNATURE);
+        DownloadTask reread = new DownloadQueue(store, engines).snapshot().get(0);
+        assertTrue("queue: verification result persists (so Install still warns after a restart)",
+                reread.verified && "abcd".equals(reread.sha256)
+                        && reread.hasWarning(DownloadTask.WARN_CHECKSUM) && reread.hasWarning(DownloadTask.WARN_SIGNATURE)
+                        && !reread.hasWarning(DownloadTask.WARN_MISSING));
+
         q.remove(a.id);
         assertEquals("queue: removing a finished record", 3, q.snapshot().size());
         assertTrue("queue: removing a done record keeps nothing else changed",

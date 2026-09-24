@@ -19,6 +19,15 @@ public final class DownloadTask {
     /** URL template (or plain URL) and version the user had entered, for preset records. */
     public String template;
     public String version;
+    /** After completion: whether the checks ran, the file's SHA-256, and what they found. */
+    public boolean verified;
+    public String sha256;
+    /** Null when the checks passed; otherwise WARN_* values joined by ','. */
+    public String warning;
+
+    public static final String WARN_CHECKSUM = "checksum";
+    public static final String WARN_SIGNATURE = "signature";
+    public static final String WARN_MISSING = "missing";
 
     public State state = State.QUEUED;
     public String fileName;
@@ -39,6 +48,10 @@ public final class DownloadTask {
         this.forceBuiltInTls = forceBuiltInTls;
         this.expectedChecksum = expectedChecksum == null ? "" : expectedChecksum;
         this.createdAt = createdAt;
+    }
+
+    public boolean hasWarning(String kind) {
+        return warning != null && ("," + warning + ",").contains("," + kind + ",");
     }
 
     public boolean isActive() {
@@ -75,6 +88,9 @@ public final class DownloadTask {
         t.finishedAt = finishedAt;
         t.template = template;
         t.version = version;
+        t.verified = verified;
+        t.sha256 = sha256;
+        t.warning = warning;
         return t;
     }
 
@@ -97,6 +113,9 @@ public final class DownloadTask {
         sb.append(",\"finished\":").append(finishedAt);
         if (template != null) sb.append(",\"template\":").append(PresetItem.escapeJson(template));
         if (version != null) sb.append(",\"version\":").append(PresetItem.escapeJson(version));
+        sb.append(",\"verified\":").append(verified ? 1 : 0);
+        if (sha256 != null) sb.append(",\"sha\":").append(PresetItem.escapeJson(sha256));
+        if (warning != null) sb.append(",\"warn\":").append(PresetItem.escapeJson(warning));
         return sb.append("}").toString();
     }
 
@@ -126,6 +145,9 @@ public final class DownloadTask {
         t.finishedAt = PresetItem.extractJsonLong(json, "finished", 0);
         t.template = PresetItem.extractJsonString(json, "template");
         t.version = PresetItem.extractJsonString(json, "version");
+        t.verified = PresetItem.extractJsonLong(json, "verified", 0) == 1;
+        t.sha256 = PresetItem.extractJsonString(json, "sha");
+        t.warning = PresetItem.extractJsonString(json, "warn");
         return t;
     }
 }
