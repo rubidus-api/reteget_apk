@@ -18,6 +18,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -25,8 +26,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import org.reteget.core.ApkSignatureVerifier;
 import org.reteget.core.ChecksumVerifier;
 import org.reteget.core.DownloadEngine;
+import org.reteget.core.PresetItem;
 import org.reteget.core.TlsHelper;
 import org.reteget.core.UrlTemplate;
 
@@ -65,12 +70,23 @@ public class MainActivity extends Activity {
     private Button btnVerifyHash;
     private Button btnInstall;
 
+    // Signature verification UI & state
+    private LinearLayout layoutSignatureResult;
+    private TextView txtSignatureResult;
+    private Button btnCopyCert;
+    private ApkSignatureVerifier.VerificationResult lastSignatureResult;
+    private boolean hasSignatureMismatch = false;
+
     // Bottom presets section
     private Button btnAddPreset;
     private TextView txtNoPresets;
     private LinearLayout layoutPresetsList;
+    private LinearLayout layoutPresetBatch;
+    private CheckBox chkPresetSelectAll;
+    private Button btnDeleteSelected;
+    private boolean isUpdatingSelectAll = false;
 
-    private List<String> presetList = new ArrayList<String>();
+    private List<PresetItem> presetList = new ArrayList<PresetItem>();
     private Map<String, EditText> variableInputs = new HashMap<String, EditText>();
     private UrlTemplate currentTemplate;
 
@@ -141,18 +157,34 @@ public class MainActivity extends Activity {
         btnVerifyHash = (Button) findViewById(R.id.btn_verify_hash);
         btnInstall = (Button) findViewById(R.id.btn_install);
 
+        layoutSignatureResult = (LinearLayout) findViewById(R.id.layout_signature_result);
+        txtSignatureResult = (TextView) findViewById(R.id.txt_signature_result);
+        btnCopyCert = (Button) findViewById(R.id.btn_copy_cert);
+
+        btnCopyCert.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
+                    copyToClipboard(lastSignatureResult.currentCert.sha256Fingerprint);
+                    Toast.makeText(MainActivity.this, R.string.toast_cert_copied, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
         btnAddPreset = (Button) findViewById(R.id.btn_add_preset);
         txtNoPresets = (TextView) findViewById(R.id.txt_no_presets);
         layoutPresetsList = (LinearLayout) findViewById(R.id.layout_presets_list);
+        layoutPresetBatch = (LinearLayout) findViewById(R.id.layout_preset_batch);
+        chkPresetSelectAll = (CheckBox) findViewById(R.id.chk_preset_select_all);
+        btnDeleteSelected = (Button) findViewById(R.id.btn_delete_selected);
     }
 
     private void setupPresets() {
         loadPresets();
         renderPresets();
         if (!presetList.isEmpty() && editUrl.getText().toString().trim().isEmpty()) {
-            String initial = presetList.get(0);
-            editUrl.setText(initial);
-            editUrl.setSelection(initial.length());
+            PresetItem initial = presetList.get(0);
+            selectAndLoadPreset(initial, false);
         }
 
         btnAddPreset.setOnClickListener(new View.OnClickListener() {
@@ -163,14 +195,76 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "URL is empty", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                if (!presetList.contains(url)) {
-                    presetList.add(url);
-                    savePresets();
-                    renderPresets();
-                    Toast.makeText(MainActivity.this, R.string.toast_preset_saved, Toast.LENGTH_SHORT).show();
-                } else {
+                PresetItem candidate = new PresetItem(url);
+                if (presetList.contains(candidate)) {
                     Toast.makeText(MainActivity.this, R.string.toast_preset_exists, Toast.LENGTH_SHORT).show();
+                    return;
                 }
+
+                // If currently downloaded file belongs to this URL, capture its metadata
+                if (lastDownloadedFile != null && lastDownloadedFile.exists()) {
+                    String finalUrl = getFinalDownloadUrl();
+                    if (url.equals(finalUrl) || (currentTemplate != null && url.equals(currentTemplate.getTemplate()))) {
+                        candidate.lastFileName = lastDownloadedFile.getName();
+                        candidate.lastFileSize = lastDownloadedFile.length();
+                        candidate.lastDownloadedAt = System.currentTimeMillis();
+                        candidate.lastSha256 = lastComputedSha256;
+                        if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
+                            candidate.lastSigFingerprint = lastSignatureResult.currentCert.sha256Fingerprint;
+                            candidate.lastAuthor = lastSignatureResult.currentCert.getDisplayAuthor();
+                        }
+                        candidate.lastVersion = extractVersionInfo(lastDownloadedFile);
+                    }
+                }
+
+                presetList.add(candidate);
+                savePresets();
+                renderPresets();
+                Toast.makeText(MainActivity.this, R.string.toast_preset_saved, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        chkPresetSelectAll.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isUpdatingSelectAll) return;
+                for (PresetItem p : presetList) {
+                    p.isSelected = isChecked;
+                }
+                renderPresets();
+            }
+        });
+
+        btnDeleteSelected.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final List<PresetItem> toDelete = new ArrayList<PresetItem>();
+                for (PresetItem p : presetList) {
+                    if (p.isSelected) {
+                        toDelete.add(p);
+                    }
+                }
+                if (toDelete.isEmpty()) return;
+
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle(R.string.dialog_delete_batch_title)
+                        .setMessage(getString(R.string.dialog_delete_batch_msg, toDelete.size()))
+                        .setPositiveButton(R.string.btn_delete, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                presetList.removeAll(toDelete);
+                                isUpdatingSelectAll = true;
+                                chkPresetSelectAll.setChecked(false);
+                                isUpdatingSelectAll = false;
+                                savePresets();
+                                renderPresets();
+                                Toast.makeText(MainActivity.this,
+                                        getString(R.string.toast_presets_deleted, toDelete.size()),
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show();
             }
         });
     }
@@ -179,46 +273,182 @@ public class MainActivity extends Activity {
         layoutPresetsList.removeAllViews();
         if (presetList.isEmpty()) {
             txtNoPresets.setVisibility(View.VISIBLE);
+            layoutPresetBatch.setVisibility(View.GONE);
             return;
         }
         txtNoPresets.setVisibility(View.GONE);
+        layoutPresetBatch.setVisibility(View.VISIBLE);
+
+        int selectedCount = 0;
+        for (PresetItem p : presetList) {
+            if (p.isSelected) selectedCount++;
+        }
+
+        if (selectedCount > 0) {
+            btnDeleteSelected.setVisibility(View.VISIBLE);
+            btnDeleteSelected.setText(getString(R.string.btn_delete_selected, selectedCount));
+        } else {
+            btnDeleteSelected.setVisibility(View.GONE);
+        }
+
+        isUpdatingSelectAll = true;
+        chkPresetSelectAll.setChecked(selectedCount == presetList.size() && !presetList.isEmpty());
+        isUpdatingSelectAll = false;
 
         LayoutInflater inflater = LayoutInflater.from(this);
         for (int i = 0; i < presetList.size(); i++) {
-            final String url = presetList.get(i);
+            final int index = i;
+            final PresetItem item = presetList.get(i);
             View row = inflater.inflate(R.layout.item_preset, layoutPresetsList, false);
 
-            TextView txtUrl = (TextView) row.findViewById(R.id.txt_preset_url);
-            txtUrl.setText(url);
+            CheckBox chk = (CheckBox) row.findViewById(R.id.chk_preset_select);
+            chk.setChecked(item.isSelected);
+            chk.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    item.isSelected = isChecked;
+                    updateBatchSelectionState();
+                }
+            });
 
-            Button btnUse = (Button) row.findViewById(R.id.btn_use);
-            Button btnDelete = (Button) row.findViewById(R.id.btn_delete);
+            View contentLayout = row.findViewById(R.id.layout_preset_content);
+            TextView txtUrl = (TextView) row.findViewById(R.id.txt_preset_url);
+            TextView txtMeta = (TextView) row.findViewById(R.id.txt_preset_meta);
+
+            txtUrl.setText(item.url);
+            txtMeta.setText(item.getMetadataSummary());
 
             View.OnClickListener useListener = new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    editUrl.setText(url);
-                    editUrl.setSelection(url.length());
-                    scrollView.smoothScrollTo(0, 0);
-                    Toast.makeText(MainActivity.this, R.string.toast_preset_loaded, Toast.LENGTH_SHORT).show();
+                    selectAndLoadPreset(item, true);
                 }
             };
 
-            btnUse.setOnClickListener(useListener);
-            row.setOnClickListener(useListener);
+            contentLayout.setOnClickListener(useListener);
+            txtUrl.setOnClickListener(useListener);
 
+            Button btnUse = (Button) row.findViewById(R.id.btn_use);
+            btnUse.setOnClickListener(useListener);
+
+            Button btnEdit = (Button) row.findViewById(R.id.btn_edit);
+            btnEdit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    promptEditPresetDialog(item);
+                }
+            });
+
+            Button btnMoveUp = (Button) row.findViewById(R.id.btn_move_up);
+            if (index == 0) {
+                btnMoveUp.setEnabled(false);
+            } else {
+                btnMoveUp.setEnabled(true);
+                btnMoveUp.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        PresetItem prev = presetList.set(index - 1, item);
+                        presetList.set(index, prev);
+                        savePresets();
+                        renderPresets();
+                    }
+                });
+            }
+
+            Button btnMoveDown = (Button) row.findViewById(R.id.btn_move_down);
+            if (index == presetList.size() - 1) {
+                btnMoveDown.setEnabled(false);
+            } else {
+                btnMoveDown.setEnabled(true);
+                btnMoveDown.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        PresetItem next = presetList.set(index + 1, item);
+                        presetList.set(index, next);
+                        savePresets();
+                        renderPresets();
+                    }
+                });
+            }
+
+            Button btnDelete = (Button) row.findViewById(R.id.btn_delete);
             btnDelete.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    presetList.remove(url);
-                    savePresets();
-                    renderPresets();
-                    Toast.makeText(MainActivity.this, R.string.toast_preset_removed, Toast.LENGTH_SHORT).show();
+                    promptDeleteSinglePresetDialog(item, index);
                 }
             });
 
             layoutPresetsList.addView(row);
         }
+    }
+
+    private void updateBatchSelectionState() {
+        int selectedCount = 0;
+        for (PresetItem p : presetList) {
+            if (p.isSelected) selectedCount++;
+        }
+        if (selectedCount > 0) {
+            btnDeleteSelected.setVisibility(View.VISIBLE);
+            btnDeleteSelected.setText(getString(R.string.btn_delete_selected, selectedCount));
+        } else {
+            btnDeleteSelected.setVisibility(View.GONE);
+        }
+        isUpdatingSelectAll = true;
+        chkPresetSelectAll.setChecked(selectedCount == presetList.size() && !presetList.isEmpty());
+        isUpdatingSelectAll = false;
+    }
+
+    private void selectAndLoadPreset(PresetItem item, boolean showToast) {
+        editUrl.setText(item.url);
+        editUrl.setSelection(item.url.length());
+        scrollView.smoothScrollTo(0, 0);
+        if (showToast) {
+            Toast.makeText(MainActivity.this, R.string.toast_preset_loaded, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void promptEditPresetDialog(final PresetItem item) {
+        final EditText input = new EditText(this);
+        input.setText(item.url);
+        input.setSelection(item.url.length());
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_edit_preset_title)
+                .setView(input)
+                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String newUrl = input.getText().toString().trim();
+                        if (!newUrl.isEmpty()) {
+                            item.url = newUrl;
+                            savePresets();
+                            renderPresets();
+                            Toast.makeText(MainActivity.this, R.string.toast_preset_updated, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void promptDeleteSinglePresetDialog(final PresetItem item, final int index) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_delete_preset_title)
+                .setMessage(getString(R.string.dialog_delete_preset_msg, item.url))
+                .setPositiveButton(R.string.btn_delete, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (index >= 0 && index < presetList.size()) {
+                            presetList.remove(index);
+                            savePresets();
+                            renderPresets();
+                            Toast.makeText(MainActivity.this, R.string.toast_preset_removed, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void loadPresets() {
@@ -228,18 +458,18 @@ public class MainActivity extends Activity {
         if (raw != null && !raw.trim().isEmpty()) {
             String[] items = raw.split("\n");
             for (String item : items) {
-                String trimmed = item.trim();
-                if (!trimmed.isEmpty()) {
-                    presetList.add(trimmed);
+                PresetItem p = PresetItem.fromJson(item);
+                if (p != null && !presetList.contains(p)) {
+                    presetList.add(p);
                 }
             }
         }
 
         if (presetList.isEmpty()) {
             // Built-in defaults
-            presetList.add("https://github.com/f-droid/fdroidclient/releases/download/{1}/F-Droid.apk");
-            presetList.add("https://archive.org/download/{1}/{2}.apk");
-            presetList.add("http://192.168.1.100:8000/apks/{1}.apk");
+            presetList.add(new PresetItem("https://github.com/f-droid/fdroidclient/releases/download/{1}/F-Droid.apk"));
+            presetList.add(new PresetItem("https://archive.org/download/{1}/{2}.apk"));
+            presetList.add(new PresetItem("http://192.168.1.100:8000/apks/{1}.apk"));
             savePresets();
         }
     }
@@ -247,8 +477,8 @@ public class MainActivity extends Activity {
     private void savePresets() {
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         StringBuilder sb = new StringBuilder();
-        for (String url : presetList) {
-            sb.append(url).append("\n");
+        for (PresetItem p : presetList) {
+            sb.append(p.toJson()).append("\n");
         }
         sp.edit().putString(KEY_PRESETS, sb.toString()).commit();
     }
@@ -517,6 +747,9 @@ public class MainActivity extends Activity {
         btnInstall.setVisibility(View.GONE);
         layoutChecksumResult.setVisibility(View.GONE);
         hasChecksumMismatch = false;
+        layoutSignatureResult.setVisibility(View.GONE);
+        hasSignatureMismatch = false;
+        lastSignatureResult = null;
 
         progressBar.setVisibility(View.VISIBLE);
         progressBar.setIndeterminate(true);
@@ -588,10 +821,17 @@ public class MainActivity extends Activity {
 
                         if (destinationFile.getName().toLowerCase().endsWith(".apk")) {
                             btnInstall.setVisibility(View.VISIBLE);
-                            if (!hasChecksumMismatch) {
+                            verifyApkSignature(destinationFile);
+                            updatePresetDownloadRecord(destinationFile);
+                            if (hasChecksumMismatch) {
+                                // Keep visible for manual install button review
+                            } else if (hasSignatureMismatch) {
+                                promptSignatureMismatchDialog(destinationFile);
+                            } else {
                                 promptAutoInstall(destinationFile);
                             }
                         } else {
+                            updatePresetDownloadRecord(destinationFile);
                             Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
                         }
                     }
@@ -635,17 +875,9 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 if (lastDownloadedFile != null && lastDownloadedFile.exists()) {
                     if (hasChecksumMismatch) {
-                        new AlertDialog.Builder(MainActivity.this)
-                                .setTitle(R.string.dialog_mismatch_title)
-                                .setMessage(R.string.dialog_mismatch_msg)
-                                .setPositiveButton(R.string.dialog_btn_install_anyway, new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        launchApkInstaller(lastDownloadedFile);
-                                    }
-                                })
-                                .setNegativeButton("Cancel", null)
-                                .show();
+                        promptChecksumMismatchDialog(lastDownloadedFile);
+                    } else if (hasSignatureMismatch) {
+                        promptSignatureMismatchDialog(lastDownloadedFile);
                     } else {
                         launchApkInstaller(lastDownloadedFile);
                     }
@@ -654,6 +886,215 @@ public class MainActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void promptChecksumMismatchDialog(final File apkFile) {
+        new AlertDialog.Builder(MainActivity.this)
+                .setTitle(R.string.dialog_mismatch_title)
+                .setMessage(R.string.dialog_mismatch_msg)
+                .setPositiveButton(R.string.dialog_btn_install_anyway, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (hasSignatureMismatch) {
+                            promptSignatureMismatchDialog(apkFile);
+                        } else {
+                            launchApkInstaller(apkFile);
+                        }
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void promptSignatureMismatchDialog(final File apkFile) {
+        String existingSrc = (lastSignatureResult != null && lastSignatureResult.existingSource != null)
+                ? lastSignatureResult.existingSource : "Existing";
+        String existingFp = (lastSignatureResult != null && lastSignatureResult.existingFingerprint != null)
+                ? lastSignatureResult.existingFingerprint : "Unknown";
+        String currentFp = (lastSignatureResult != null && lastSignatureResult.currentCert != null)
+                ? lastSignatureResult.currentCert.sha256Fingerprint : "Unknown";
+
+        String msg = getString(R.string.dialog_sig_mismatch_msg, existingSrc, existingFp, currentFp);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.dialog_sig_mismatch_title)
+                .setMessage(msg)
+                .setPositiveButton(R.string.dialog_btn_sig_install_anyway, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
+                            String pkg = getPackageNameFromArchive(apkFile);
+                            saveSignatureRecord(pkg, lastSignatureResult.currentCert);
+                        }
+                        launchApkInstaller(apkFile);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private String getPackageNameFromArchive(File apkFile) {
+        try {
+            PackageManager pm = getPackageManager();
+            PackageInfo pi = pm.getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+            if (pi != null && pi.packageName != null) {
+                return pi.packageName;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private void verifyApkSignature(File apkFile) {
+        ApkSignatureVerifier.CertInfo currentCert = null;
+        String packageName = null;
+
+        // Try PackageManager.getPackageArchiveInfo first
+        try {
+            PackageManager pm = getPackageManager();
+            PackageInfo pi = pm.getPackageArchiveInfo(apkFile.getAbsolutePath(), PackageManager.GET_SIGNATURES);
+            if (pi != null) {
+                packageName = pi.packageName;
+                if (pi.signatures != null && pi.signatures.length > 0) {
+                    currentCert = ApkSignatureVerifier.fromDerBytes(pi.signatures[0].toByteArray());
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // Fallback to pure Java APK reading if signatures not populated
+        if (currentCert == null) {
+            currentCert = ApkSignatureVerifier.fromApkFile(apkFile);
+        }
+
+        if (currentCert == null) {
+            layoutSignatureResult.setVisibility(View.GONE);
+            hasSignatureMismatch = false;
+            lastSignatureResult = null;
+            return;
+        }
+
+        // Check if installed on device
+        ApkSignatureVerifier.CertInfo installedCert = null;
+        if (packageName != null) {
+            try {
+                PackageInfo installedPi = getPackageManager().getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
+                if (installedPi != null && installedPi.signatures != null && installedPi.signatures.length > 0) {
+                    installedCert = ApkSignatureVerifier.fromDerBytes(installedPi.signatures[0].toByteArray());
+                }
+            } catch (PackageManager.NameNotFoundException ignored) {
+            } catch (Exception ignored) {}
+        }
+
+        // Check saved history in SharedPreferences
+        SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String savedFingerprint = null;
+        String savedAuthor = null;
+        if (packageName != null) {
+            savedFingerprint = sp.getString("sig_fp_" + packageName, null);
+            savedAuthor = sp.getString("sig_auth_" + packageName, null);
+        }
+
+        lastSignatureResult = ApkSignatureVerifier.verifyContinuity(currentCert, installedCert, savedFingerprint, savedAuthor);
+        hasSignatureMismatch = lastSignatureResult.isMismatch;
+
+        layoutSignatureResult.setVisibility(View.VISIBLE);
+        switch (lastSignatureResult.status) {
+            case MATCH_INSTALLED:
+                layoutSignatureResult.setBackgroundColor(Color.parseColor("#f1f8e9")); // Light Green
+                txtSignatureResult.setTextColor(Color.parseColor("#1b5e20")); // Dark Green
+                txtSignatureResult.setText(getString(R.string.sig_verified_installed, (packageName != null ? packageName : "app"))
+                        + "\nAuthor: " + currentCert.getDisplayAuthor()
+                        + "\nSHA-256: " + currentCert.sha256Fingerprint);
+                break;
+            case MATCH_PREVIOUS:
+                layoutSignatureResult.setBackgroundColor(Color.parseColor("#f1f8e9")); // Light Green
+                txtSignatureResult.setTextColor(Color.parseColor("#1b5e20"));
+                txtSignatureResult.setText(getString(R.string.sig_verified_previous)
+                        + "\nAuthor: " + currentCert.getDisplayAuthor()
+                        + "\nSHA-256: " + currentCert.sha256Fingerprint);
+                break;
+            case FIRST_TIME:
+                layoutSignatureResult.setBackgroundColor(Color.parseColor("#f5f7f9")); // Neutral
+                txtSignatureResult.setTextColor(Color.parseColor("#333333"));
+                txtSignatureResult.setText(getString(R.string.sig_first_time, currentCert.getDisplayAuthor())
+                        + "\nSHA-256: " + currentCert.sha256Fingerprint);
+                saveSignatureRecord(packageName, currentCert);
+                break;
+            case MISMATCH_INSTALLED:
+                layoutSignatureResult.setBackgroundColor(Color.parseColor("#ffebee")); // Light Red
+                txtSignatureResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
+                txtSignatureResult.setText(getString(R.string.sig_mismatch_installed,
+                        (packageName != null ? packageName : "app"),
+                        (installedCert != null ? installedCert.sha256Fingerprint : "Unknown"),
+                        currentCert.sha256Fingerprint));
+                break;
+            case MISMATCH_PREVIOUS:
+                layoutSignatureResult.setBackgroundColor(Color.parseColor("#ffebee")); // Light Red
+                txtSignatureResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
+                txtSignatureResult.setText(getString(R.string.sig_mismatch_previous,
+                        savedFingerprint, currentCert.sha256Fingerprint));
+                break;
+            default:
+                layoutSignatureResult.setVisibility(View.GONE);
+                break;
+        }
+    }
+
+    private void saveSignatureRecord(String packageName, ApkSignatureVerifier.CertInfo cert) {
+        if (packageName == null || cert == null) return;
+        SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        sp.edit()
+                .putString("sig_fp_" + packageName, cert.sha256Fingerprint)
+                .putString("sig_auth_" + packageName, cert.getDisplayAuthor())
+                .commit();
+    }
+
+    private void updatePresetDownloadRecord(File destinationFile) {
+        if (destinationFile == null || !destinationFile.exists()) return;
+        String rawUrl = editUrl.getText().toString().trim();
+        String templatePattern = (currentTemplate != null) ? currentTemplate.getTemplate() : rawUrl;
+        String finalUrl = getFinalDownloadUrl();
+
+        for (PresetItem p : presetList) {
+            if (p.url.equals(templatePattern) || p.url.equals(rawUrl) || p.url.equals(finalUrl)) {
+                p.lastFileName = destinationFile.getName();
+                p.lastFileSize = destinationFile.length();
+                p.lastDownloadedAt = System.currentTimeMillis();
+                p.lastSha256 = lastComputedSha256;
+                if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
+                    p.lastSigFingerprint = lastSignatureResult.currentCert.sha256Fingerprint;
+                    p.lastAuthor = lastSignatureResult.currentCert.getDisplayAuthor();
+                }
+                p.lastVersion = extractVersionInfo(destinationFile);
+                savePresets();
+                renderPresets();
+                break;
+            }
+        }
+    }
+
+    private String extractVersionInfo(File file) {
+        if (variableInputs.containsKey("1")) {
+            EditText et = variableInputs.get("1");
+            if (et != null) {
+                String v = et.getText().toString().trim();
+                if (!v.isEmpty()) return v;
+            }
+        }
+        if (variableInputs.containsKey("version")) {
+            EditText et = variableInputs.get("version");
+            if (et != null) {
+                String v = et.getText().toString().trim();
+                if (!v.isEmpty()) return v;
+            }
+        }
+        try {
+            PackageManager pm = getPackageManager();
+            PackageInfo pi = pm.getPackageArchiveInfo(file.getAbsolutePath(), 0);
+            if (pi != null && pi.versionName != null) {
+                return pi.versionName;
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private void promptAutoInstall(final File apkFile) {

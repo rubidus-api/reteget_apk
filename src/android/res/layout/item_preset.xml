@@ -6,33 +6,118 @@
     android:gravity="center_vertical"
     android:padding="6dp"
     android:layout_marginBottom="6dp"
-    android:background="#eef3f8">
+    android:background="#f4f7fb">
 
-    <Button
-        android:id="@+id/btn_use"
+    <!-- Leftmost Checkbox for multi-selection -->
+    <CheckBox
+        android:id="@+id/chk_preset_select"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/btn_use_preset"
-        android:textSize="11sp"
-        android:layout_marginRight="6dp" />
+        android:layout_marginRight="4dp" />
 
-    <TextView
-        android:id="@+id/txt_preset_url"
+    <!-- Center Content: Title/URL and Metadata. Tapping loads preset into URL bar -->
+    <LinearLayout
+        android:id="@+id/layout_preset_content"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="12sp"
-        android:textColor="#222222"
-        android:maxLines="3"
-        android:ellipsize="middle"
-        android:paddingRight="4dp" />
+        android:orientation="vertical"
+        android:paddingRight="4dp"
+        android:clickable="true">
 
-    <Button
-        android:id="@+id/btn_delete"
+        <TextView
+            android:id="@+id/txt_preset_url"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#0d47a1"
+            android:maxLines="2"
+            android:ellipsize="middle" />
+
+        <TextView
+            android:id="@+id/txt_preset_meta"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:textColor="#555555"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:paddingTop="2dp" />
+    </LinearLayout>
+
+    <!-- Right Action Buttons: Use, Edit, Move Up, Move Down, Delete -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="×"
-        android:textSize="14sp"
-        android:textColor="#cc0000"
-        android:minWidth="36dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btn_use"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_use_preset"
+            android:textSize="11sp"
+            android:minWidth="28dp"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginLeft="2dp" />
+
+        <Button
+            android:id="@+id/btn_edit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_edit"
+            android:textSize="11sp"
+            android:minWidth="28dp"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginLeft="2dp" />
+
+        <Button
+            android:id="@+id/btn_move_up"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_move_up"
+            android:textSize="11sp"
+            android:minWidth="28dp"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginLeft="2dp" />
+
+        <Button
+            android:id="@+id/btn_move_down"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_move_down"
+            android:textSize="11sp"
+            android:minWidth="28dp"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginLeft="2dp" />
+
+        <Button
+            android:id="@+id/btn_delete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✕"
+            android:textSize="11sp"
+            android:textColor="#cc0000"
+            android:minWidth="28dp"
+            android:paddingLeft="4dp"
+            android:paddingRight="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:layout_marginLeft="2dp" />
+    </LinearLayout>
+
 </LinearLayout>

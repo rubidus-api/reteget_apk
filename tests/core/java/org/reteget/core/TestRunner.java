@@ -32,6 +32,14 @@ public class TestRunner {
         testChecksumComputationAndVerification();
         testChecksumMultiHash();
 
+        testApkSignatureExtraction();
+        testApkSignatureCommonName();
+        testApkSignatureNormalization();
+        testApkSignatureContinuityVerification();
+
+        testPresetItemSerialization();
+        testPresetItemLegacyCompatibility();
+
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");
         System.out.println("-------------------------------------------");
@@ -247,5 +255,120 @@ public class TestRunner {
         } catch (Exception e) {
             assertTrue("multi-hash exception: " + e.getMessage(), false);
         }
+    }
+
+    private static void testApkSignatureExtraction() {
+        File apk = new File("dist/reteget-0.1.0-debug.apk");
+        if (apk.exists()) {
+            ApkSignatureVerifier.CertInfo cert = ApkSignatureVerifier.fromApkFile(apk);
+            assertTrue("apk cert extracted from dist debug apk", cert != null);
+            if (cert != null) {
+                assertTrue("cert has sha256 fingerprint", cert.sha256Fingerprint != null && cert.sha256Fingerprint.length() > 64);
+                assertTrue("cert display author non-empty", !cert.getDisplayAuthor().isEmpty());
+                assertEquals("cert CN extracted", "ReteGet development", cert.commonName);
+            }
+        } else {
+            System.out.println("  SKIP: dist/reteget-0.1.0-debug.apk not found for signature extraction test");
+        }
+    }
+
+    private static void testApkSignatureCommonName() {
+        assertEquals("CN only", "MyAuthor", ApkSignatureVerifier.extractCommonName("CN=MyAuthor"));
+        assertEquals("CN with multiple attributes", "Rubidus",
+                ApkSignatureVerifier.extractCommonName("CN=Rubidus, OU=Dev, O=Org, C=KR"));
+        assertEquals("CN with quotes", "Special, Name",
+                ApkSignatureVerifier.extractCommonName("CN=\"Special, Name\", O=Org"));
+        assertEquals("no CN fallback to DN", "O=Org, C=KR",
+                ApkSignatureVerifier.extractCommonName("O=Org, C=KR"));
+    }
+
+    private static void testApkSignatureNormalization() {
+        assertEquals("normalize uppercase and colons", "AABBCC",
+                ApkSignatureVerifier.normalizeFingerprint("aa:bb:cc"));
+        assertEquals("normalize spaces", "AABBCC",
+                ApkSignatureVerifier.normalizeFingerprint("aa bb cc"));
+        assertEquals("format fingerprint", "0A:FF",
+                ApkSignatureVerifier.formatFingerprint(new byte[] { 10, -1 }));
+    }
+
+    private static void testApkSignatureContinuityVerification() {
+        java.util.Date now = new java.util.Date();
+        ApkSignatureVerifier.CertInfo certA = new ApkSignatureVerifier.CertInfo(
+                "AA:BB:CC:DD", "11:22", "CN=AuthorA", "CN=AuthorA", "AuthorA", now, now);
+        ApkSignatureVerifier.CertInfo certB = new ApkSignatureVerifier.CertInfo(
+                "EE:FF:00:11", "33:44", "CN=AuthorB", "CN=AuthorB", "AuthorB", now, now);
+
+        // 1. Installed match
+        ApkSignatureVerifier.VerificationResult r1 = ApkSignatureVerifier.verifyContinuity(certA, certA, null, null);
+        assertEquals("r1 status match installed", ApkSignatureVerifier.Status.MATCH_INSTALLED, r1.status);
+        assertTrue("r1 not mismatch", !r1.isMismatch);
+
+        // 2. Installed conflict
+        ApkSignatureVerifier.VerificationResult r2 = ApkSignatureVerifier.verifyContinuity(certA, certB, null, null);
+        assertEquals("r2 status mismatch installed", ApkSignatureVerifier.Status.MISMATCH_INSTALLED, r2.status);
+        assertTrue("r2 is mismatch", r2.isMismatch);
+
+        // 3. Previous match (TOFU)
+        ApkSignatureVerifier.VerificationResult r3 = ApkSignatureVerifier.verifyContinuity(certA, null, "aa:bb:cc:dd", "AuthorA");
+        assertEquals("r3 status match previous", ApkSignatureVerifier.Status.MATCH_PREVIOUS, r3.status);
+        assertTrue("r3 not mismatch", !r3.isMismatch);
+
+        // 4. Previous mismatch (Author changed)
+        ApkSignatureVerifier.VerificationResult r4 = ApkSignatureVerifier.verifyContinuity(certA, null, "EE:FF:00:11", "AuthorB");
+        assertEquals("r4 status mismatch previous", ApkSignatureVerifier.Status.MISMATCH_PREVIOUS, r4.status);
+        assertTrue("r4 is mismatch", r4.isMismatch);
+
+        // 5. First time
+        ApkSignatureVerifier.VerificationResult r5 = ApkSignatureVerifier.verifyContinuity(certA, null, null, null);
+        assertEquals("r5 status first time", ApkSignatureVerifier.Status.FIRST_TIME, r5.status);
+        assertTrue("r5 not mismatch", !r5.isMismatch);
+
+        // 6. Unsigned
+        ApkSignatureVerifier.VerificationResult r6 = ApkSignatureVerifier.verifyContinuity(null, null, null, null);
+        assertEquals("r6 status unsigned", ApkSignatureVerifier.Status.UNSIGNED, r6.status);
+        assertTrue("r6 not mismatch", !r6.isMismatch);
+    }
+
+    private static void testPresetItemSerialization() {
+        PresetItem item = new PresetItem(
+                "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk",
+                "reteget-0.1.0.apk",
+                66318,
+                "0.1.0",
+                1727180400000L,
+                "b451000632d431f1fc8be48a520ca4aaae66a504ef96fe0d12f6a7d65609462f",
+                "2A:4F:91:0C:68:57:3E",
+                "ReteGet development"
+        );
+
+        String json = item.toJson();
+        assertTrue("json contains url", json.contains("\"url\":"));
+        assertTrue("json contains filename", json.contains("\"filename\":\"reteget-0.1.0.apk\""));
+        assertTrue("json contains size", json.contains("\"size\":66318"));
+        assertTrue("json contains sha256", json.contains("\"sha256\":\"b451000632d431f1"));
+
+        PresetItem restored = PresetItem.fromJson(json);
+        assertTrue("restored not null", restored != null);
+        assertEquals("restored url", item.url, restored.url);
+        assertEquals("restored filename", item.lastFileName, restored.lastFileName);
+        assertEquals("restored size", item.lastFileSize, restored.lastFileSize);
+        assertEquals("restored version", item.lastVersion, restored.lastVersion);
+        assertEquals("restored time", item.lastDownloadedAt, restored.lastDownloadedAt);
+        assertEquals("restored sha256", item.lastSha256, restored.lastSha256);
+        assertEquals("restored sig", item.lastSigFingerprint, restored.lastSigFingerprint);
+        assertEquals("restored author", item.lastAuthor, restored.lastAuthor);
+
+        assertTrue("hasMetadata is true", restored.hasMetadata());
+        assertTrue("formatted size contains KB", restored.getFormattedSize().contains("KB"));
+        assertTrue("summary contains filename", restored.getMetadataSummary().contains("reteget-0.1.0.apk"));
+    }
+
+    private static void testPresetItemLegacyCompatibility() {
+        String legacyUrl = "https://archive.org/download/{1}/{2}.apk";
+        PresetItem item = PresetItem.fromJson(legacyUrl);
+        assertTrue("legacy restored not null", item != null);
+        assertEquals("legacy url match", legacyUrl, item.url);
+        assertTrue("legacy has no metadata", !item.hasMetadata());
+        assertEquals("legacy summary string", "No download record yet", item.getMetadataSummary());
     }
 }

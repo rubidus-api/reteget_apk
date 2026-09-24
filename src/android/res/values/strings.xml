@@ -31,10 +31,36 @@
     <string name="lbl_presets_title">Saved Presets</string>
     <string name="lbl_presets_hint">Tap any preset below to load it into the URL bar above:</string>
     <string name="btn_add_preset">+ Save Current URL</string>
-    <string name="btn_use_preset">▲ Use</string>
+    <string name="btn_use_preset">▲</string>
+    <string name="btn_edit">✎</string>
+    <string name="btn_move_up">↑</string>
+    <string name="btn_move_down">↓</string>
+    <string name="btn_delete">Delete</string>
+    <string name="chk_select_all">Select all</string>
+    <string name="btn_delete_selected">Delete Selected (%1$d)</string>
+    <string name="dialog_edit_preset_title">Edit Preset URL</string>
+    <string name="dialog_delete_preset_title">Delete Preset</string>
+    <string name="dialog_delete_preset_msg">Are you sure you want to delete this preset?\n\n%1$s</string>
+    <string name="dialog_delete_batch_title">Delete Selected Presets</string>
+    <string name="dialog_delete_batch_msg">Are you sure you want to delete %1$d selected presets?</string>
     <string name="toast_preset_loaded">Preset loaded into URL bar</string>
     <string name="toast_preset_saved">Saved to presets</string>
+    <string name="toast_preset_updated">Preset updated</string>
     <string name="toast_preset_exists">Preset already exists</string>
     <string name="toast_preset_removed">Preset removed</string>
+    <string name="toast_presets_deleted">Deleted %1$d presets</string>
     <string name="no_presets_msg">No presets saved yet. Enter a URL above and tap \'+ Save Current URL\'.</string>
+
+    <!-- APK Signature & Continuity strings -->
+    <string name="lbl_signature">APK Signature &amp; Author:</string>
+    <string name="sig_verified_installed">✓ Author verified (matches installed %1$s)</string>
+    <string name="sig_verified_previous">✓ Author verified (matches previous download)</string>
+    <string name="sig_first_time">Author: %1$s (First download for this app)</string>
+    <string name="sig_mismatch_installed">⚠️ SIGNATURE CONFLICT!\nDiffers from installed app (%1$s)!\nInstalled: %2$s\nThis file: %3$s\nSystem install will fail unless previous app is uninstalled.</string>
+    <string name="sig_mismatch_previous">⚠️ AUTHOR CHANGED!\nDiffers from previous download!\nPrevious: %1$s\nThis file: %2$s\nThe signing key or author has changed.</string>
+    <string name="btn_copy_cert">Copy Cert SHA-256</string>
+    <string name="toast_cert_copied">Certificate SHA-256 copied to clipboard</string>
+    <string name="dialog_sig_mismatch_title">APK Signature Mismatch Warning</string>
+    <string name="dialog_sig_mismatch_msg">The signing certificate of this APK differs from the existing version!\n\n• Existing (%1$s): %2$s\n• This APK: %3$s\n\nInstalling this may cause an INSTALL_FAILED_UPDATE_INCOMPATIBLE error or may be an unverified/counterfeit build.\n\nDo you want to ignore this warning and proceed with installation?</string>
+    <string name="dialog_btn_sig_install_anyway">Ignore &amp; Install Anyway</string>
 </resources>

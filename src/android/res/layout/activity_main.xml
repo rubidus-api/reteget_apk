@@ -207,6 +207,42 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- APK Signature Result Area (shown for downloaded APKs) -->
+        <LinearLayout
+            android:id="@+id/layout_signature_result"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#f5f7f9"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/lbl_signature"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:paddingBottom="4dp" />
+
+            <TextView
+                android:id="@+id/txt_signature_result"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#222222"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/btn_copy_cert"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_copy_cert"
+                android:textSize="11sp" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/btn_install"
             android:layout_width="fill_parent"
@@ -261,7 +297,39 @@
                 android:text="@string/lbl_presets_hint"
                 android:textSize="11sp"
                 android:textColor="#777777"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginBottom="6dp" />
+
+            <!-- Batch operations bar: Select All & Delete Selected -->
+            <LinearLayout
+                android:id="@+id/layout_preset_batch"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <CheckBox
+                    android:id="@+id/chk_preset_select_all"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/chk_select_all"
+                    android:textSize="11sp"
+                    android:textColor="#444444" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/btn_delete_selected"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_delete_selected"
+                    android:textSize="11sp"
+                    android:textColor="#cc0000"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/txt_no_presets"

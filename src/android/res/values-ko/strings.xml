@@ -31,10 +31,36 @@
     <string name="lbl_presets_title">저장된 프리셋 목록</string>
     <string name="lbl_presets_hint">아래 항목을 터치하면 위쪽 주소창으로 즉시 불러옵니다:</string>
     <string name="btn_add_preset">+ 현재 주소 저장</string>
-    <string name="btn_use_preset">▲ 적용</string>
+    <string name="btn_use_preset">▲</string>
+    <string name="btn_edit">✎</string>
+    <string name="btn_move_up">↑</string>
+    <string name="btn_move_down">↓</string>
+    <string name="btn_delete">삭제</string>
+    <string name="chk_select_all">전체 선택</string>
+    <string name="btn_delete_selected">선택 삭제 (%1$d)</string>
+    <string name="dialog_edit_preset_title">프리셋 주소 수정</string>
+    <string name="dialog_delete_preset_title">프리셋 삭제</string>
+    <string name="dialog_delete_preset_msg">이 프리셋을 목록에서 삭제하시겠습니까?\n\n%1$s</string>
+    <string name="dialog_delete_batch_title">선택 프리셋 일괄 삭제</string>
+    <string name="dialog_delete_batch_msg">선택한 %1$d개의 프리셋을 삭제하시겠습니까?</string>
     <string name="toast_preset_loaded">프리셋을 주소창에 적용했습니다</string>
     <string name="toast_preset_saved">프리셋 목록에 저장되었습니다</string>
+    <string name="toast_preset_updated">프리셋이 수정되었습니다</string>
     <string name="toast_preset_exists">이미 등록된 주소입니다</string>
     <string name="toast_preset_removed">프리셋이 삭제되었습니다</string>
+    <string name="toast_presets_deleted">%1$d개의 프리셋이 삭제되었습니다</string>
     <string name="no_presets_msg">저장된 프리셋이 없습니다. 위 주소창에 입력 후 \'+ 현재 주소 저장\'을 누르세요.</string>
+
+    <!-- APK Signature & Continuity strings -->
+    <string name="lbl_signature">APK 서명 및 제작자 연속성:</string>
+    <string name="sig_verified_installed">✓ 제작자 서명 확인됨 (기기 설치 %1$s 일치)</string>
+    <string name="sig_verified_previous">✓ 제작자 서명 확인됨 (이전 다운로드 일치)</string>
+    <string name="sig_first_time">제작자: %1$s (최초 다운로드)</string>
+    <string name="sig_mismatch_installed">⚠️ 서명 충돌 경고!\n기기에 설치된 앱(%1$s)과 서명이 다릅니다!\n설치본: %2$s\n신규본: %3$s\n기존 앱을 삭제하지 않으면 시스템 설치가 거부됩니다.</string>
+    <string name="sig_mismatch_previous">⚠️ 제작자 서명 변경 경고!\n이전 다운로드 버전과 서명이 다릅니다!\n이전: %1$s\n신규: %2$s\n제작자 키가 변경되었거나 비공식 빌드일 수 있습니다.</string>
+    <string name="btn_copy_cert">인증서 지문 복사</string>
+    <string name="toast_cert_copied">인증서 SHA-256 지문이 클립보드에 복사되었습니다</string>
+    <string name="dialog_sig_mismatch_title">APK 서명 불일치 경고</string>
+    <string name="dialog_sig_mismatch_msg">이 APK의 제작자 서명이 기존 버전과 일치하지 않습니다!\n\n• 기존 (%1$s): %2$s\n• 신규 APK: %3$s\n\n출처가 다르거나 위조된 빌드일 수 있으며, 안드로이드 시스템에서 서명 충돌로 설치가 차단될 수 있습니다.\n\n그래도 무시하고 설치를 진행하시겠습니까?</string>
+    <string name="dialog_btn_sig_install_anyway">무시하고 설치 진행</string>
 </resources>
