@@ -7,9 +7,11 @@
 PC나 ADB 연결, 무거운 현대 앱 스토어 없이도 구형 기기에서 직접 APK, 펌웨어, 패키지 파일을 다운로드하고 설치할 수 있습니다.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet 안드로이드 4.4 템플릿 변수 화면" width="240">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_resolved.png" alt="ReteGet 버전 번호 입력 및 URL 실시간 조합" width="240">
+  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet 안드로이드 4.4 템플릿 변수 및 체크섬 입력 화면" width="220">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/screenshot_resolved.png" alt="ReteGet 버전 번호 입력 및 URL 실시간 조합" width="220">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/screenshot_presets.png" alt="ReteGet 하단 프리셋 카드 목록" width="220">
 </p>
 
 ---
@@ -29,10 +31,11 @@ ReteGet은 외부 프레임워크 없는 순수 프레임워크 기반 안드로
 - **모던 TLS 1.2 강제 활성화 및 최신 Root CA 번들 탑재**: 소켓 생성 계층을 감싸 Android 4.x에서 TLS 1.2를 강제로 켜고 리플렉션을 통해 SNI를 주입합니다. 최신 주요 루트 인증서(Let's Encrypt의 ISRG Root X1, DigiCert Global Root CA/G2, USERTrust, Google Trust Services)를 앱 내부에 번들하여 최신 GitHub 릴리즈나 CDN 호스트로부터의 HTTPS 다운로드를 성공시킵니다.
 - **순수 HTTP 및 패시브 FTP 지원**: 가정 내 홈 서버나 사내 인트라넷 망에서 간편히 앱을 배포할 수 있도록 일반 HTTP와 의존성 제로 순수 Java 소켓 기반 RFC 959 패시브 모드 FTP 다운로드를 지원합니다.
 - **릴리즈 URL 템플릿 지원 (`{1}`, `{2}`, `{version}`)**: 다운로드 주소에 포함된 괄호형 플레이스홀더(예: `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`)를 자동으로 감지합니다. 템플릿이 인식되면 작은 입력창을 화면에 띄워, 긴 주소를 매번 다시 입력할 필요 없이 버전 번호만 넣으면 완성된 주소로 다운로드합니다.
-- **프리셋 주소 관리**: 자주 내려받는 URL을 드롭다운에 저장해 두고 필요할 때마다 즉시 불러오거나 삭제할 수 있습니다.
+- **체크섬 및 무결성 해시 검증**: GitHub, GitLab 및 오픈소스 생태계에서 널리 쓰이는 **SHA-256**, **SHA-1**, **MD5**, **SHA-512** 해시 검증을 지원합니다. 순수 16진수 값, `sha256: <해시>`, 또는 리눅스 `sha256sum` 명령 출력 형식(`<해시>  <파일명>`)을 그대로 복사해서 붙여넣어도 자동으로 알고리즘을 감지하여 파일을 대조합니다. 일치 시 안전한 설치를 돕고, 불일치 시 설치 전 경고를 띄워 위변조 및 다운로드 손상을 방지하며, 계산된 해시값을 원터치로 복사할 수 있습니다.
+- **하단 프리셋 카드 목록**: 자주 쓰는 주소 목록이 화면 하단에 터치하기 편한 카드 형태로 배치됩니다. 항목을 터치하면 위쪽 대상 주소창으로 즉시 올라가 적용(`▲ 적용`)되므로, 구형 터치스크린에서 불편한 드롭다운 메뉴를 거칠 필요가 없습니다. 새로운 주소는 `+ 현재 주소 저장` 버튼으로 바로 보관할 수 있습니다.
 - **원터치 APK 설치 연동**: `/sdcard/Download`로 `.apk` 파일 다운로드가 끝나면 즉시 시스템 패키지 인스톨러(`Intent.ACTION_VIEW` - `application/vnd.android.package-archive`) 호출 다이얼로그를 띄워 한 번의 탭으로 설치 화면으로 진입합니다.
 - **자체 서명 / 사설 SSL 우회 체크박스**: 홈랩이나 사내 테스트 서버의 자체 서명 인증서 환경을 위해 인증서 검증을 건너뛰는 옵션을 기본 제공합니다.
-- **초경량 단일 Dex**: 최종 APK 크기 70 KB 미만 (디버그 빌드 실측치 약 50 KB), 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
+- **초경량 단일 Dex**: 최종 APK 크기 70 KB 미만 (디버그 빌드 실측치 약 60 KB), 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
 
 ## 대상 플랫폼 및 호환성
 

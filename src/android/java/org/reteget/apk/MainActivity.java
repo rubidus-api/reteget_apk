@@ -2,9 +2,11 @@ package org.reteget.apk;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,18 +14,18 @@ import android.os.Environment;
 import android.os.StrictMode;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.Spinner;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.reteget.core.ChecksumVerifier;
 import org.reteget.core.DownloadEngine;
 import org.reteget.core.TlsHelper;
 import org.reteget.core.UrlTemplate;
@@ -33,38 +35,49 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "reteget_prefs";
     private static final String KEY_PRESETS = "saved_presets";
 
-    private Spinner spinnerPresets;
-    private Button btnSavePreset;
-    private Button btnDeletePreset;
+    private ScrollView scrollView;
     private EditText editUrl;
     private LinearLayout layoutVariables;
     private LinearLayout variablesFields;
     private TextView txtResolvedPreview;
+
+    private EditText editExpectedChecksum;
+    private Button btnClearChecksum;
     private CheckBox chkInsecureSsl;
+
     private Button btnDownload;
     private Button btnCancel;
     private ProgressBar progressBar;
     private TextView txtProgressDetails;
     private TextView txtStatus;
+
+    private LinearLayout layoutChecksumResult;
+    private TextView txtChecksumResult;
+    private Button btnCopyHash;
+    private Button btnVerifyHash;
     private Button btnInstall;
 
+    // Bottom presets section
+    private Button btnAddPreset;
+    private TextView txtNoPresets;
+    private LinearLayout layoutPresetsList;
+
     private List<String> presetList = new ArrayList<String>();
-    private ArrayAdapter<String> presetAdapter;
     private Map<String, EditText> variableInputs = new HashMap<String, EditText>();
     private UrlTemplate currentTemplate;
 
     private DownloadEngine downloadEngine;
     private File lastDownloadedFile;
+    private String lastComputedSha256 = null;
+    private boolean hasChecksumMismatch = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +94,7 @@ public class MainActivity extends Activity {
         bindViews();
         setupPresets();
         setupUrlWatcher();
+        setupChecksumControls();
         setupDownloadControls();
         setupInstallControl();
     }
@@ -105,45 +119,43 @@ public class MainActivity extends Activity {
     }
 
     private void bindViews() {
-        spinnerPresets = (Spinner) findViewById(R.id.spinner_presets);
-        btnSavePreset = (Button) findViewById(R.id.btn_save_preset);
-        btnDeletePreset = (Button) findViewById(R.id.btn_delete_preset);
+        scrollView = (ScrollView) findViewById(R.id.scroll_view);
         editUrl = (EditText) findViewById(R.id.edit_url);
         layoutVariables = (LinearLayout) findViewById(R.id.layout_variables);
         variablesFields = (LinearLayout) findViewById(R.id.variables_fields);
         txtResolvedPreview = (TextView) findViewById(R.id.txt_resolved_preview);
+
+        editExpectedChecksum = (EditText) findViewById(R.id.edit_expected_checksum);
+        btnClearChecksum = (Button) findViewById(R.id.btn_clear_checksum);
         chkInsecureSsl = (CheckBox) findViewById(R.id.chk_insecure_ssl);
+
         btnDownload = (Button) findViewById(R.id.btn_download);
         btnCancel = (Button) findViewById(R.id.btn_cancel);
         progressBar = (ProgressBar) findViewById(R.id.progress_bar);
         txtProgressDetails = (TextView) findViewById(R.id.txt_progress_details);
         txtStatus = (TextView) findViewById(R.id.txt_status);
+
+        layoutChecksumResult = (LinearLayout) findViewById(R.id.layout_checksum_result);
+        txtChecksumResult = (TextView) findViewById(R.id.txt_checksum_result);
+        btnCopyHash = (Button) findViewById(R.id.btn_copy_hash);
+        btnVerifyHash = (Button) findViewById(R.id.btn_verify_hash);
         btnInstall = (Button) findViewById(R.id.btn_install);
+
+        btnAddPreset = (Button) findViewById(R.id.btn_add_preset);
+        txtNoPresets = (TextView) findViewById(R.id.txt_no_presets);
+        layoutPresetsList = (LinearLayout) findViewById(R.id.layout_presets_list);
     }
 
     private void setupPresets() {
         loadPresets();
-        presetAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, presetList);
-        presetAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerPresets.setAdapter(presetAdapter);
+        renderPresets();
+        if (!presetList.isEmpty() && editUrl.getText().toString().trim().isEmpty()) {
+            String initial = presetList.get(0);
+            editUrl.setText(initial);
+            editUrl.setSelection(initial.length());
+        }
 
-        spinnerPresets.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position >= 0 && position < presetList.size()) {
-                    String selected = presetList.get(position);
-                    if (!selected.equals(editUrl.getText().toString())) {
-                        editUrl.setText(selected);
-                        editUrl.setSelection(selected.length());
-                    }
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
-        });
-
-        btnSavePreset.setOnClickListener(new View.OnClickListener() {
+        btnAddPreset.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 String url = editUrl.getText().toString().trim();
@@ -154,32 +166,59 @@ public class MainActivity extends Activity {
                 if (!presetList.contains(url)) {
                     presetList.add(url);
                     savePresets();
-                    presetAdapter.notifyDataSetChanged();
-                    spinnerPresets.setSelection(presetList.size() - 1);
-                    Toast.makeText(MainActivity.this, "Preset saved", Toast.LENGTH_SHORT).show();
+                    renderPresets();
+                    Toast.makeText(MainActivity.this, R.string.toast_preset_saved, Toast.LENGTH_SHORT).show();
                 } else {
-                    Toast.makeText(MainActivity.this, "Preset already exists", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, R.string.toast_preset_exists, Toast.LENGTH_SHORT).show();
                 }
             }
         });
+    }
 
-        btnDeletePreset.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                int pos = spinnerPresets.getSelectedItemPosition();
-                if (pos >= 0 && pos < presetList.size()) {
-                    presetList.remove(pos);
-                    savePresets();
-                    presetAdapter.notifyDataSetChanged();
-                    if (!presetList.isEmpty()) {
-                        spinnerPresets.setSelection(0);
-                    } else {
-                        editUrl.setText("");
-                    }
-                    Toast.makeText(MainActivity.this, "Preset removed", Toast.LENGTH_SHORT).show();
+    private void renderPresets() {
+        layoutPresetsList.removeAllViews();
+        if (presetList.isEmpty()) {
+            txtNoPresets.setVisibility(View.VISIBLE);
+            return;
+        }
+        txtNoPresets.setVisibility(View.GONE);
+
+        LayoutInflater inflater = LayoutInflater.from(this);
+        for (int i = 0; i < presetList.size(); i++) {
+            final String url = presetList.get(i);
+            View row = inflater.inflate(R.layout.item_preset, layoutPresetsList, false);
+
+            TextView txtUrl = (TextView) row.findViewById(R.id.txt_preset_url);
+            txtUrl.setText(url);
+
+            Button btnUse = (Button) row.findViewById(R.id.btn_use);
+            Button btnDelete = (Button) row.findViewById(R.id.btn_delete);
+
+            View.OnClickListener useListener = new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    editUrl.setText(url);
+                    editUrl.setSelection(url.length());
+                    scrollView.smoothScrollTo(0, 0);
+                    Toast.makeText(MainActivity.this, R.string.toast_preset_loaded, Toast.LENGTH_SHORT).show();
                 }
-            }
-        });
+            };
+
+            btnUse.setOnClickListener(useListener);
+            row.setOnClickListener(useListener);
+
+            btnDelete.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    presetList.remove(url);
+                    savePresets();
+                    renderPresets();
+                    Toast.makeText(MainActivity.this, R.string.toast_preset_removed, Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            layoutPresetsList.addView(row);
+        }
     }
 
     private void loadPresets() {
@@ -252,30 +291,28 @@ public class MainActivity extends Activity {
 
         variablesFields.removeAllViews();
         variableInputs.clear();
-        layoutVariables.setVisibility(View.VISIBLE);
 
         for (final String placeholder : placeholders) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setPadding(0, 4, 0, 4);
+            row.setPadding(0, 2, 0, 2);
 
-            TextView lbl = new TextView(this);
-            lbl.setText("{" + placeholder + "}: ");
-            lbl.setTextSize(13);
-            lbl.setTextColor(0xFF333333);
-            lbl.setPadding(0, 0, 8, 0);
+            TextView label = new TextView(this);
+            label.setText("{" + placeholder + "}: ");
+            label.setTextSize(13);
+            label.setTextColor(Color.parseColor("#333333"));
+            label.setMinWidth(70);
 
-            final EditText input = new EditText(this);
+            EditText input = new EditText(this);
             input.setLayoutParams(new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.FILL_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
-            input.setSingleLine(true);
+                    LinearLayout.LayoutParams.WRAP_CONTENT));
             input.setTextSize(13);
-            input.setHint("Value for " + placeholder);
+            input.setHint("Value for {" + placeholder + "}");
+            input.setSingleLine(true);
 
-            String prev = oldValues.get(placeholder);
-            if (prev != null) {
-                input.setText(prev);
+            if (oldValues.containsKey(placeholder)) {
+                input.setText(oldValues.get(placeholder));
             }
 
             input.addTextChangedListener(new TextWatcher() {
@@ -291,37 +328,147 @@ public class MainActivity extends Activity {
                 }
             });
 
-            variableInputs.put(placeholder, input);
-            row.addView(lbl);
+            row.addView(label);
             row.addView(input);
             variablesFields.addView(row);
+            variableInputs.put(placeholder, input);
         }
 
+        layoutVariables.setVisibility(View.VISIBLE);
         updateResolvedPreview();
     }
 
     private void updateResolvedPreview() {
-        if (currentTemplate == null || !currentTemplate.hasPlaceholders()) {
-            txtResolvedPreview.setText("");
-            return;
-        }
-        Map<String, String> map = new HashMap<String, String>();
+        if (currentTemplate == null) return;
+        Map<String, String> values = new HashMap<String, String>();
         for (Map.Entry<String, EditText> entry : variableInputs.entrySet()) {
-            map.put(entry.getKey(), entry.getValue().getText().toString().trim());
+            values.put(entry.getKey(), entry.getValue().getText().toString());
         }
-        String resolved = currentTemplate.resolve(map);
-        txtResolvedPreview.setText("Target: " + resolved);
+        String resolved = currentTemplate.resolve(values);
+        txtResolvedPreview.setText("Resolved URL:\n" + resolved);
     }
 
-    private String getTargetUrl() {
-        if (currentTemplate != null && currentTemplate.hasPlaceholders()) {
-            Map<String, String> map = new HashMap<String, String>();
-            for (Map.Entry<String, EditText> entry : variableInputs.entrySet()) {
-                map.put(entry.getKey(), entry.getValue().getText().toString().trim());
-            }
-            return currentTemplate.resolve(map);
+    private String getFinalDownloadUrl() {
+        if (currentTemplate == null || !currentTemplate.hasPlaceholders()) {
+            return editUrl.getText().toString().trim();
         }
-        return editUrl.getText().toString().trim();
+        Map<String, String> values = new HashMap<String, String>();
+        for (Map.Entry<String, EditText> entry : variableInputs.entrySet()) {
+            values.put(entry.getKey(), entry.getValue().getText().toString().trim());
+        }
+        return currentTemplate.resolve(values);
+    }
+
+    private void setupChecksumControls() {
+        editExpectedChecksum.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s.length() > 0) {
+                    btnClearChecksum.setVisibility(View.VISIBLE);
+                } else {
+                    btnClearChecksum.setVisibility(View.GONE);
+                }
+            }
+        });
+
+        btnClearChecksum.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editExpectedChecksum.setText("");
+            }
+        });
+
+        btnCopyHash.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (lastComputedSha256 != null && !lastComputedSha256.isEmpty()) {
+                    copyToClipboard(lastComputedSha256);
+                    Toast.makeText(MainActivity.this, R.string.toast_copied, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
+        btnVerifyHash.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (lastDownloadedFile == null || !lastDownloadedFile.exists()) {
+                    Toast.makeText(MainActivity.this, "No file downloaded yet", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showVerifyDialog();
+            }
+        });
+    }
+
+    private void showVerifyDialog() {
+        final EditText input = new EditText(this);
+        input.setHint(R.string.checksum_hint);
+        input.setSingleLine(true);
+        input.setTextSize(12);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.btn_verify_hash)
+                .setMessage(R.string.lbl_checksum)
+                .setView(input)
+                .setPositiveButton("Verify", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String hash = input.getText().toString().trim();
+                        if (!hash.isEmpty()) {
+                            editExpectedChecksum.setText(hash);
+                            verifyDownloadedFile(lastDownloadedFile, hash);
+                        }
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void verifyDownloadedFile(File file, String expectedInput) {
+        if (file == null || !file.exists()) return;
+
+        if (expectedInput != null && !expectedInput.trim().isEmpty()) {
+            ChecksumVerifier.Result res = ChecksumVerifier.verify(file, expectedInput);
+            if (res.matched) {
+                hasChecksumMismatch = false;
+                txtChecksumResult.setTextColor(Color.parseColor("#1b5e20")); // Dark Green
+                txtChecksumResult.setText(getString(R.string.checksum_verified, res.algorithm) + "\n" + res.actualHash);
+            } else if (res.error != null) {
+                hasChecksumMismatch = false;
+                txtChecksumResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
+                txtChecksumResult.setText("Checksum error: " + res.error + "\nComputed SHA-256: " + lastComputedSha256);
+            } else {
+                hasChecksumMismatch = true;
+                txtChecksumResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
+                txtChecksumResult.setText(getString(R.string.checksum_mismatch, res.expectedHash, res.algorithm, res.actualHash));
+            }
+        } else {
+            hasChecksumMismatch = false;
+            txtChecksumResult.setTextColor(Color.parseColor("#333333"));
+            txtChecksumResult.setText(getString(R.string.checksum_computed, "SHA-256", lastComputedSha256));
+        }
+
+        layoutChecksumResult.setVisibility(View.VISIBLE);
+    }
+
+    private void copyToClipboard(String text) {
+        if (Build.VERSION.SDK_INT >= 11) {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("hash", text));
+            }
+        } else {
+            android.text.ClipboardManager cm = (android.text.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setText(text);
+            }
+        }
     }
 
     private void setupDownloadControls() {
@@ -338,15 +485,15 @@ public class MainActivity extends Activity {
                 if (downloadEngine != null) {
                     downloadEngine.cancel();
                     btnCancel.setEnabled(false);
-                    txtStatus.setText("Cancelling…");
+                    txtStatus.setText("Cancelling download…");
                 }
             }
         });
     }
 
     private void startDownload() {
-        final String url = getTargetUrl();
-        if (url == null || url.isEmpty()) {
+        String url = getFinalDownloadUrl();
+        if (url.isEmpty()) {
             Toast.makeText(this, "Please enter a valid URL", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -368,6 +515,9 @@ public class MainActivity extends Activity {
         btnDownload.setEnabled(false);
         btnCancel.setEnabled(true);
         btnInstall.setVisibility(View.GONE);
+        layoutChecksumResult.setVisibility(View.GONE);
+        hasChecksumMismatch = false;
+
         progressBar.setVisibility(View.VISIBLE);
         progressBar.setIndeterminate(true);
         txtProgressDetails.setVisibility(View.VISIBLE);
@@ -415,6 +565,13 @@ public class MainActivity extends Activity {
 
             @Override
             public void onComplete(final File destinationFile) {
+                // Compute hash off the main UI thread
+                try {
+                    lastComputedSha256 = ChecksumVerifier.computeHash(destinationFile, "SHA-256");
+                } catch (Exception e) {
+                    lastComputedSha256 = "Error computing hash: " + e.getMessage();
+                }
+
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -426,9 +583,14 @@ public class MainActivity extends Activity {
                         txtStatus.setText("Saved to: " + destinationFile.getAbsolutePath()
                                 + " (" + formatBytes(destinationFile.length()) + ")");
 
+                        String expected = editExpectedChecksum.getText().toString().trim();
+                        verifyDownloadedFile(destinationFile, expected);
+
                         if (destinationFile.getName().toLowerCase().endsWith(".apk")) {
                             btnInstall.setVisibility(View.VISIBLE);
-                            promptAutoInstall(destinationFile);
+                            if (!hasChecksumMismatch) {
+                                promptAutoInstall(destinationFile);
+                            }
                         } else {
                             Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
                         }
@@ -472,7 +634,21 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 if (lastDownloadedFile != null && lastDownloadedFile.exists()) {
-                    launchApkInstaller(lastDownloadedFile);
+                    if (hasChecksumMismatch) {
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle(R.string.dialog_mismatch_title)
+                                .setMessage(R.string.dialog_mismatch_msg)
+                                .setPositiveButton(R.string.dialog_btn_install_anyway, new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        launchApkInstaller(lastDownloadedFile);
+                                    }
+                                })
+                                .setNegativeButton("Cancel", null)
+                                .show();
+                    } else {
+                        launchApkInstaller(lastDownloadedFile);
+                    }
                 } else {
                     Toast.makeText(MainActivity.this, "APK file not found", Toast.LENGTH_SHORT).show();
                 }

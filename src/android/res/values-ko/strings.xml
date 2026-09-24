@@ -2,16 +2,39 @@
 <resources>
     <string name="app_name">ReteGet</string>
     <string name="url_hint">다운로드 주소 입력 (http, https, ftp)</string>
+    <string name="target_url">다운로드 대상 주소:</string>
     <string name="btn_download">다운로드</string>
     <string name="btn_cancel">취소</string>
     <string name="btn_install">APK 설치</string>
-    <string name="btn_save_preset">현재 주소 저장</string>
-    <string name="btn_delete_preset">선택 항목 삭제</string>
-    <string name="lbl_presets">미리 저장된 주소:</string>
     <string name="lbl_templates">템플릿 변수:</string>
     <string name="chk_insecure">인증서 검증 건너뛰기 (자체 서명/구형 SSL 허용)</string>
     <string name="status_idle">다운로드 준비 완료.</string>
     <string name="status_downloading">다운로드 중…</string>
     <string name="status_success">다운로드 완료!</string>
     <string name="status_error">다운로드 실패: %s</string>
+
+    <!-- Checksum strings -->
+    <string name="lbl_checksum">예상 체크섬 / 해시 (선택사항):</string>
+    <string name="checksum_hint">SHA-256, SHA-1, MD5 또는 sha256sum 결과 붙여넣기</string>
+    <string name="checksum_verified">✓ 체크섬 검증 완료 (%1$s 일치)</string>
+    <string name="checksum_mismatch">✗ 체크섬 불일치!\n예상값: %1$s\n실제값 (%2$s): %3$s</string>
+    <string name="checksum_computed">파일 %1$s: %2$s</string>
+    <string name="btn_copy_hash">해시 복사</string>
+    <string name="btn_verify_hash">해시 검증…</string>
+    <string name="btn_clear">지우기</string>
+    <string name="toast_copied">해시값이 클립보드에 복사되었습니다</string>
+    <string name="dialog_mismatch_title">체크섬 불일치 경고</string>
+    <string name="dialog_mismatch_msg">다운로드한 파일의 해시값이 예상값과 일치하지 않습니다!\n\n파일이 손상되었거나 위변조되었을 수 있습니다.\n\n그래도 설치를 진행하시겠습니까?</string>
+    <string name="dialog_btn_install_anyway">위험 감수하고 설치</string>
+
+    <!-- Preset strings -->
+    <string name="lbl_presets_title">저장된 프리셋 목록</string>
+    <string name="lbl_presets_hint">아래 항목을 터치하면 위쪽 주소창으로 즉시 불러옵니다:</string>
+    <string name="btn_add_preset">+ 현재 주소 저장</string>
+    <string name="btn_use_preset">▲ 적용</string>
+    <string name="toast_preset_loaded">프리셋을 주소창에 적용했습니다</string>
+    <string name="toast_preset_saved">프리셋 목록에 저장되었습니다</string>
+    <string name="toast_preset_exists">이미 등록된 주소입니다</string>
+    <string name="toast_preset_removed">프리셋이 삭제되었습니다</string>
+    <string name="no_presets_msg">저장된 프리셋이 없습니다. 위 주소창에 입력 후 \'+ 현재 주소 저장\'을 누르세요.</string>
 </resources>

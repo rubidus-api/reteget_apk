@@ -2,16 +2,39 @@
 <resources>
     <string name="app_name">ReteGet</string>
     <string name="url_hint">Enter download URL (http, https, ftp)</string>
+    <string name="target_url">Target URL:</string>
     <string name="btn_download">Download</string>
     <string name="btn_cancel">Cancel</string>
     <string name="btn_install">Install APK</string>
-    <string name="btn_save_preset">Save Current</string>
-    <string name="btn_delete_preset">Delete Selected</string>
-    <string name="lbl_presets">Preset URLs:</string>
     <string name="lbl_templates">Template Variables:</string>
     <string name="chk_insecure">Allow unverified SSL / self-signed certs</string>
     <string name="status_idle">Ready to download.</string>
     <string name="status_downloading">Downloading…</string>
     <string name="status_success">Download complete!</string>
     <string name="status_error">Download failed: %s</string>
+
+    <!-- Checksum strings -->
+    <string name="lbl_checksum">Expected Checksum (optional):</string>
+    <string name="checksum_hint">SHA-256, SHA-1, MD5, or sha256sum line</string>
+    <string name="checksum_verified">✓ Checksum verified (%1$s matches)</string>
+    <string name="checksum_mismatch">✗ Checksum MISMATCH!\nExpected: %1$s\nActual (%2$s): %3$s</string>
+    <string name="checksum_computed">File %1$s: %2$s</string>
+    <string name="btn_copy_hash">Copy Hash</string>
+    <string name="btn_verify_hash">Verify Hash…</string>
+    <string name="btn_clear">Clear</string>
+    <string name="toast_copied">Hash copied to clipboard</string>
+    <string name="dialog_mismatch_title">Checksum Mismatch Warning</string>
+    <string name="dialog_mismatch_msg">The downloaded file does NOT match the expected checksum!\n\nIt may be incomplete, corrupted, or modified.\n\nDo you still want to install?</string>
+    <string name="dialog_btn_install_anyway">Install Anyway</string>
+
+    <!-- Preset strings -->
+    <string name="lbl_presets_title">Saved Presets</string>
+    <string name="lbl_presets_hint">Tap any preset below to load it into the URL bar above:</string>
+    <string name="btn_add_preset">+ Save Current URL</string>
+    <string name="btn_use_preset">▲ Use</string>
+    <string name="toast_preset_loaded">Preset loaded into URL bar</string>
+    <string name="toast_preset_saved">Saved to presets</string>
+    <string name="toast_preset_exists">Preset already exists</string>
+    <string name="toast_preset_removed">Preset removed</string>
+    <string name="no_presets_msg">No presets saved yet. Enter a URL above and tap \'+ Save Current URL\'.</string>
 </resources>

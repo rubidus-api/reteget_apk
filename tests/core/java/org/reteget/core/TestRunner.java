@@ -27,6 +27,11 @@ public class TestRunner {
 
         testTlsHelperCertLoading();
 
+        testChecksumExtraction();
+        testChecksumAlgorithmDetection();
+        testChecksumComputationAndVerification();
+        testChecksumMultiHash();
+
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");
         System.out.println("-------------------------------------------");
@@ -147,6 +152,100 @@ public class TestRunner {
             assertTrue("insecure hostname verifier created", TlsHelper.getHostnameVerifier(true) != null);
         } catch (Exception e) {
             assertTrue("cert loading exception: " + e.getMessage(), false);
+        }
+    }
+
+    // --- ChecksumVerifier Tests ---
+
+    private static void testChecksumExtraction() {
+        String raw1 = "aadc789da2f43c7cecfff068ae2da9cd312983dc2da8bb424a264be91b773679  reteget-0.1.0.apk";
+        assertEquals("extract GNU format hash",
+                "aadc789da2f43c7cecfff068ae2da9cd312983dc2da8bb424a264be91b773679",
+                ChecksumVerifier.extractHash(raw1));
+
+        String raw2 = "SHA256 (archive.zip) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        assertEquals("extract BSD format hash",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                ChecksumVerifier.extractHash(raw2));
+
+        String raw3 = "sha256: AADC789DA2F43C7CECFFF068AE2DA9CD312983DC2DA8BB424A264BE91B773679";
+        assertEquals("extract prefix uppercase hash",
+                "aadc789da2f43c7cecfff068ae2da9cd312983dc2da8bb424a264be91b773679",
+                ChecksumVerifier.extractHash(raw3));
+
+        String raw4 = "d41d8cd98f00b204e9800998ecf8427e";
+        assertEquals("extract bare MD5",
+                "d41d8cd98f00b204e9800998ecf8427e",
+                ChecksumVerifier.extractHash(raw4));
+    }
+
+    private static void testChecksumAlgorithmDetection() {
+        assertEquals("detect SHA-256 by length", ChecksumVerifier.ALGO_SHA256,
+                ChecksumVerifier.detectAlgorithm("aadc789da2f43c7cecfff068ae2da9cd312983dc2da8bb424a264be91b773679"));
+
+        assertEquals("detect SHA-1 by length", ChecksumVerifier.ALGO_SHA1,
+                ChecksumVerifier.detectAlgorithm("da39a3ee5e6b4b0d3255bfef95601890afd80709"));
+
+        assertEquals("detect MD5 by length", ChecksumVerifier.ALGO_MD5,
+                ChecksumVerifier.detectAlgorithm("d41d8cd98f00b204e9800998ecf8427e"));
+
+        assertEquals("detect SHA-512 by length", ChecksumVerifier.ALGO_SHA512,
+                ChecksumVerifier.detectAlgorithm("cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"));
+
+        assertEquals("detect by prefix sha256:", ChecksumVerifier.ALGO_SHA256,
+                ChecksumVerifier.detectAlgorithm("sha256: 1234"));
+
+        assertEquals("detect by BSD SHA1 (file) =", ChecksumVerifier.ALGO_SHA1,
+                ChecksumVerifier.detectAlgorithm("SHA1 (file.bin) = da39a3ee5e6b4b0d3255bfef95601890afd80709"));
+    }
+
+    private static void testChecksumComputationAndVerification() {
+        try {
+            File tmp = File.createTempFile("reteget_test_", ".txt");
+            tmp.deleteOnExit();
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp);
+            fos.write("Hello ReteGet\n".getBytes("UTF-8"));
+            fos.close();
+
+            // Computed SHA-256 for "Hello ReteGet\n":
+            // echo "Hello ReteGet" | sha256sum -> b451000632d431f1fc8be48a520ca4aaae66a504ef96fe0d12f6a7d65609462f
+            String expectedSha256 = ChecksumVerifier.computeHash(tmp, "SHA-256");
+            assertTrue("sha256 computed non-empty", expectedSha256 != null && expectedSha256.length() == 64);
+
+            ChecksumVerifier.Result resMatch = ChecksumVerifier.verify(tmp, expectedSha256);
+            assertTrue("verify match returns true", resMatch.matched);
+            assertEquals("verify match algo is SHA-256", ChecksumVerifier.ALGO_SHA256, resMatch.algorithm);
+
+            ChecksumVerifier.Result resMismatch = ChecksumVerifier.verify(tmp, "0000000000000000000000000000000000000000000000000000000000000000");
+            assertTrue("verify mismatch returns false", !resMismatch.matched);
+
+            ChecksumVerifier.Result resPrefixMatch = ChecksumVerifier.verify(tmp, "sha256: " + expectedSha256);
+            assertTrue("verify with sha256: prefix matches", resPrefixMatch.matched);
+
+            tmp.delete();
+        } catch (Exception e) {
+            assertTrue("checksum test exception: " + e.getMessage(), false);
+        }
+    }
+
+    private static void testChecksumMultiHash() {
+        try {
+            File tmp = File.createTempFile("reteget_multi_", ".txt");
+            tmp.deleteOnExit();
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp);
+            fos.write("Hello World".getBytes("UTF-8"));
+            fos.close();
+
+            String[] algos = new String[] { "SHA-256", "SHA-1", "MD5" };
+            Map<String, String> hashes = ChecksumVerifier.computeMultiHashes(tmp, algos);
+            assertEquals("multi-hash count", 3, hashes.size());
+            assertEquals("multi-hash md5", "b10a8db164e0754105b7a99be72e3fe5", hashes.get("MD5"));
+            assertEquals("multi-hash sha1", "0a4d55a8d778e5022fab701977c5d840bbc486d0", hashes.get("SHA-1"));
+            assertEquals("multi-hash sha256", "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e", hashes.get("SHA-256"));
+
+            tmp.delete();
+        } catch (Exception e) {
+            assertTrue("multi-hash exception: " + e.getMessage(), false);
         }
     }
 }

@@ -26,30 +26,38 @@ emulator_boot "$AVD" "$OUT/emulator.log" "-gpu swiftshader_indirect"
 
 echo "==> installing $(basename "$APK")"
 "$ADB" logcat -c || true
-"$ADB" install -r "$APK"
+"$ADB" install -r "$APK" < /dev/null
 
 echo "==> launching ReteGet activity"
-"$ADB" shell am start -n org.reteget.apk/.MainActivity
-sleep 8
+"$ADB" shell am start -n org.reteget.apk/.MainActivity < /dev/null >/dev/null
+sleep 20
 
 echo "==> capturing initial screen with template placeholder"
-"$ADB" shell screencap -p /data/local/tmp/reteget_screen1.png
-"$ADB" pull /data/local/tmp/reteget_screen1.png "$SHOTS/screenshot_template.png"
+"$ADB" shell screencap -p /data/local/tmp/reteget_screen1.png < /dev/null
+"$ADB" pull /data/local/tmp/reteget_screen1.png "$SHOTS/screenshot_template.png" < /dev/null
 echo "    saved docs/screenshots/screenshot_template.png"
 
 echo "==> entering version number in template field"
-# Tap on the dynamic EditText for {1} (around middle screen) or send tab/text
-"$ADB" shell input keyevent KEYCODE_TAB
-"$ADB" shell input text "1.20.0"
-sleep 2
+"$ADB" shell input keyevent KEYCODE_TAB < /dev/null
+"$ADB" shell input text "1.20.0" < /dev/null
+sleep 3
 
 echo "==> capturing screen with resolved URL preview"
-"$ADB" shell screencap -p /data/local/tmp/reteget_screen2.png
-"$ADB" pull /data/local/tmp/reteget_screen2.png "$SHOTS/screenshot_resolved.png"
+"$ADB" shell screencap -p /data/local/tmp/reteget_screen2.png < /dev/null
+"$ADB" pull /data/local/tmp/reteget_screen2.png "$SHOTS/screenshot_resolved.png" < /dev/null
 echo "    saved docs/screenshots/screenshot_resolved.png"
 
+echo "==> scrolling down to presets section"
+"$ADB" shell input swipe 160 550 160 150 300 < /dev/null
+sleep 2
+
+echo "==> capturing bottom presets list"
+"$ADB" shell screencap -p /data/local/tmp/reteget_screen3.png < /dev/null
+"$ADB" pull /data/local/tmp/reteget_screen3.png "$SHOTS/screenshot_presets.png" < /dev/null
+echo "    saved docs/screenshots/screenshot_presets.png"
+
 echo "==> verify app process is running cleanly"
-"$ADB" shell ps | grep -q "org.reteget.apk" || fail "ReteGet crashed on launch"
+"$ADB" shell ps < /dev/null | grep -q "org.reteget.apk" || fail "ReteGet crashed on launch"
 echo "    ReteGet process is alive: PASS"
 
 echo "==> verify-kitkat complete"

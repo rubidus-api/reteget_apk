@@ -7,9 +7,11 @@
 Download APKs, firmware images, and files directly on vintage devices without needing a PC, ADB, or modern app stores.
 
 <p align="center">
-  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet URL template input on Android 4.4" width="240">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_resolved.png" alt="ReteGet dynamic placeholder resolution" width="240">
+  <img src="docs/screenshots/screenshot_template.png" alt="ReteGet URL template input on Android 4.4" width="220">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/screenshot_resolved.png" alt="ReteGet dynamic placeholder resolution" width="220">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/screenshot_presets.png" alt="ReteGet bottom presets list" width="220">
 </p>
 
 ---
@@ -29,10 +31,11 @@ ReteGet is a dedicated, framework-only Android utility that bridges the gap, all
 - **Modern TLS 1.2 & Bundled Root CAs**: Wraps SSL socket creation to force-enable TLS 1.2 on Android 4.x with SNI reflection support. Bundles modern Root CAs (ISRG Root X1, DigiCert Global Root CA/G2, USERTrust, Google Trust Services) so downloads from modern GitHub Releases and CDN hosts succeed without warnings.
 - **Direct HTTP & Passive FTP**: Supports plain HTTP and zero-dependency RFC 959 passive mode FTP for fast local network or intranet software distribution.
 - **Release URL Templates (`{1}`, `{2}`, `{version}`)**: Detects bracketed placeholder tokens in download URLs (such as `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`). When present, ReteGet dynamically generates small input boxes so you only need to type the version number to fetch an update.
-- **Preset Management**: Save favorite download URLs and switch between them using an on-screen dropdown.
+- **Checksum & Hash Integrity Verification**: Verifies downloaded files against industry-standard hashes widely used by GitHub, GitLab, and open-source distributions: **SHA-256**, **SHA-1**, **MD5**, and **SHA-512**. You can paste raw hex digests, `sha256: <hash>`, or standard GNU `sha256sum` output lines (`<hash>  <filename>`). Automatically detects the algorithm, warns of corruption or tampering before installation, and provides one-tap hash copying.
+- **Bottom Saved Presets**: Frequently used endpoints and template URLs are laid out as touchable cards at the bottom of the screen. A single tap on any preset loads it directly into the Target URL field at the top (`▲ Use`), eliminating clunky dropdown menus on legacy touchscreens. Save current URLs with `+ Save Current URL`.
 - **One-Touch APK Installation**: Once an `.apk` file finishes downloading to `/sdcard/Download`, ReteGet immediately prompts to launch the system package installer (`Intent.ACTION_VIEW` with MIME type `application/vnd.android.package-archive`).
 - **Unverified SSL Bypass Option**: Includes an optional checkbox to allow unverified or self-signed certificates when downloading from local test servers or home labs.
-- **Ultra-Lightweight & Single-Dex**: Under 70 KB APK size (~50 KB debug build), single dex file, zero third-party libraries, and built without Gradle.
+- **Ultra-Lightweight & Single-Dex**: Under 70 KB APK size (~60 KB debug build), single dex file, zero third-party libraries, and built without Gradle.
 
 ## Target Platform & Compatibility
 

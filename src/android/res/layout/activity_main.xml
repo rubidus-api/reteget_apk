@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll_view"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:fillViewport="true">
@@ -22,47 +23,11 @@
         <TextView
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:text="@string/lbl_presets"
-            android:textSize="14sp"
-            android:textColor="#555555"
-            android:paddingTop="4dp" />
-
-        <Spinner
-            android:id="@+id/spinner_presets"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="6dp" />
-
-        <LinearLayout
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
-
-            <Button
-                android:id="@+id/btn_save_preset"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/btn_save_preset"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/btn_delete_preset"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/btn_delete_preset"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:text="Target URL:"
+            android:text="@string/target_url"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="#333333" />
+            android:textColor="#333333"
+            android:paddingTop="4dp" />
 
         <EditText
             android:id="@+id/edit_url"
@@ -107,6 +72,39 @@
                 android:paddingTop="4dp" />
         </LinearLayout>
 
+        <!-- Expected Checksum Input (optional) -->
+        <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/lbl_checksum"
+            android:textSize="13sp"
+            android:textColor="#444444"
+            android:paddingTop="2dp" />
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <EditText
+                android:id="@+id/edit_expected_checksum"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/checksum_hint"
+                android:singleLine="true"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btn_clear_checksum"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_clear"
+                android:textSize="11sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <CheckBox
             android:id="@+id/chk_insecure_ssl"
             android:layout_width="fill_parent"
@@ -120,7 +118,7 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="10dp">
 
             <Button
                 android:id="@+id/btn_download"
@@ -163,9 +161,51 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:text="@string/status_idle"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textColor="#333333"
-            android:paddingBottom="12dp" />
+            android:paddingBottom="6dp" />
+
+        <!-- Checksum Result Area (shown after download) -->
+        <LinearLayout
+            android:id="@+id/layout_checksum_result"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#f0f4f8"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/txt_checksum_result"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#222222"
+                android:paddingBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_copy_hash"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_copy_hash"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btn_verify_hash"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_verify_hash"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <Button
             android:id="@+id/btn_install"
@@ -174,7 +214,72 @@
             android:text="@string/btn_install"
             android:textStyle="bold"
             android:visibility="gone"
-            android:layout_marginTop="8dp" />
+            android:layout_marginBottom="14dp" />
+
+        <!-- Visual divider before Presets section at the bottom -->
+        <View
+            android:layout_width="fill_parent"
+            android:layout_height="1dp"
+            android:background="#d0d0d0"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Presets Section at bottom -->
+        <LinearLayout
+            android:id="@+id/layout_presets_section"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/lbl_presets_title"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#333333" />
+
+                <Button
+                    android:id="@+id/btn_add_preset"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_add_preset"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/lbl_presets_hint"
+                android:textSize="11sp"
+                android:textColor="#777777"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/txt_no_presets"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/no_presets_msg"
+                android:textSize="12sp"
+                android:textColor="#888888"
+                android:visibility="gone"
+                android:padding="8dp" />
+
+            <!-- Dynamic container for preset rows -->
+            <LinearLayout
+                android:id="@+id/layout_presets_list"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>
