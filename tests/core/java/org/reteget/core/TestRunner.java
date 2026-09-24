@@ -38,7 +38,11 @@ public class TestRunner {
         testApkSignatureContinuityVerification();
 
         testPresetItemSerialization();
+        testPresetItemDisplayName();
         testPresetItemLegacyCompatibility();
+
+        testPureGcmEncryptionDecryption();
+        testDownloadEngineSslErrorDetection();
 
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");
@@ -331,6 +335,7 @@ public class TestRunner {
 
     private static void testPresetItemSerialization() {
         PresetItem item = new PresetItem(
+                "ReteGet",
                 "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk",
                 "reteget-0.1.0.apk",
                 66318,
@@ -343,12 +348,14 @@ public class TestRunner {
 
         String json = item.toJson();
         assertTrue("json contains url", json.contains("\"url\":"));
+        assertTrue("json contains name", json.contains("\"name\":\"ReteGet\""));
         assertTrue("json contains filename", json.contains("\"filename\":\"reteget-0.1.0.apk\""));
         assertTrue("json contains size", json.contains("\"size\":66318"));
         assertTrue("json contains sha256", json.contains("\"sha256\":\"b451000632d431f1"));
 
         PresetItem restored = PresetItem.fromJson(json);
         assertTrue("restored not null", restored != null);
+        assertEquals("restored name", item.name, restored.name);
         assertEquals("restored url", item.url, restored.url);
         assertEquals("restored filename", item.lastFileName, restored.lastFileName);
         assertEquals("restored size", item.lastFileSize, restored.lastFileSize);
@@ -363,12 +370,87 @@ public class TestRunner {
         assertTrue("summary contains filename", restored.getMetadataSummary().contains("reteget-0.1.0.apk"));
     }
 
+    private static void testPresetItemDisplayName() {
+        PresetItem p1 = new PresetItem("Custom Title", "https://example.com/downloads/app.apk");
+        assertEquals("p1 explicit name", "Custom Title", p1.getDisplayName());
+
+        PresetItem p2 = new PresetItem("", "https://example.com/downloads/tool-v1.apk");
+        p2.lastFileName = "tool-v1.apk";
+        assertEquals("p2 fallback to lastFileName", "tool-v1.apk", p2.getDisplayName());
+
+        PresetItem p3 = new PresetItem("", "https://example.com/downloads/v1.0/my_suite.apk");
+        assertEquals("p3 fallback to url filename", "my_suite.apk", p3.getDisplayName());
+
+        PresetItem p4 = new PresetItem("", "https://example.com/");
+        assertEquals("p4 fallback to full url", "https://example.com/", p4.getDisplayName());
+    }
+
     private static void testPresetItemLegacyCompatibility() {
         String legacyUrl = "https://archive.org/download/{1}/{2}.apk";
         PresetItem item = PresetItem.fromJson(legacyUrl);
         assertTrue("legacy restored not null", item != null);
         assertEquals("legacy url match", legacyUrl, item.url);
+        assertEquals("legacy empty name", "", item.name);
         assertTrue("legacy has no metadata", !item.hasMetadata());
         assertEquals("legacy summary string", "No download record yet", item.getMetadataSummary());
+    }
+
+    private static void testPureGcmEncryptionDecryption() {
+        try {
+            byte[] key = new byte[16];
+            for (int i = 0; i < 16; i++) key[i] = (byte) (i + 1);
+            byte[] iv = new byte[12];
+            for (int i = 0; i < 12; i++) iv[i] = (byte) (i * 3);
+
+            byte[] plaintext = "Hello Pure Java TLS 1.2 AES-GCM on Galaxy Note 2!".getBytes("UTF-8");
+            byte[] aad = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+
+            org.reteget.core.tls.PureTlsSocket.PureGcm gcm = new org.reteget.core.tls.PureTlsSocket.PureGcm(key);
+            byte[] ciphertextWithTag = gcm.encrypt(iv, plaintext, aad);
+
+            assertTrue("ciphertext longer than plaintext by 16 bytes",
+                    ciphertextWithTag.length == plaintext.length + 16);
+
+            byte[] decrypted = gcm.decrypt(iv, ciphertextWithTag, aad);
+            assertEquals("decrypted matches plaintext",
+                    new String(plaintext, "UTF-8"), new String(decrypted, "UTF-8"));
+
+            // Tamper test: modify 1 bit of ciphertext
+            byte[] tampered = java.util.Arrays.copyOf(ciphertextWithTag, ciphertextWithTag.length);
+            tampered[0] ^= 0x01;
+            boolean failedTag = false;
+            try {
+                gcm.decrypt(iv, tampered, aad);
+            } catch (SecurityException se) {
+                failedTag = true;
+            }
+            assertTrue("tampered ciphertext throws SecurityException", failedTag);
+
+            // Wrong AAD test
+            byte[] wrongAad = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x06 };
+            boolean failedAad = false;
+            try {
+                gcm.decrypt(iv, ciphertextWithTag, wrongAad);
+            } catch (SecurityException se) {
+                failedAad = true;
+            }
+            assertTrue("wrong aad throws SecurityException", failedAad);
+
+        } catch (Exception e) {
+            assertTrue("gcm exception: " + e.getMessage(), false);
+        }
+    }
+
+    private static void testDownloadEngineSslErrorDetection() {
+        assertTrue("SSLException detected",
+                DownloadEngine.isSslError(new javax.net.ssl.SSLException("SSL error")));
+        assertTrue("SSLProtocolException detected",
+                DownloadEngine.isSslError(new javax.net.ssl.SSLProtocolException("SSL handshake aborted: sslv3 alert handshake failure")));
+        assertTrue("IOException with ssl message detected",
+                DownloadEngine.isSslError(new java.io.IOException("SSL routines:SSL23_GET_SERVER_HELLO:sslv3 alert handshake failure")));
+        assertTrue("IOException with handshake keyword",
+                DownloadEngine.isSslError(new java.io.IOException("Handshake failed")));
+        assertTrue("plain connection error not ssl",
+                !DownloadEngine.isSslError(new java.io.IOException("Connection refused")));
     }
 }

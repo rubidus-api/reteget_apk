@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "reteget_prefs";
     private static final String KEY_PRESETS = "saved_presets";
+    private static final String PREF_PRESETS_VERSION = "presets_version";
+    private static final int CURRENT_PRESETS_VERSION = 2;
 
     private ScrollView scrollView;
     private EditText editUrl;
@@ -57,6 +59,7 @@ public class MainActivity extends Activity {
     private EditText editExpectedChecksum;
     private Button btnClearChecksum;
     private CheckBox chkInsecureSsl;
+    private CheckBox chkPureTls;
 
     private Button btnDownload;
     private Button btnCancel;
@@ -144,6 +147,15 @@ public class MainActivity extends Activity {
         editExpectedChecksum = (EditText) findViewById(R.id.edit_expected_checksum);
         btnClearChecksum = (Button) findViewById(R.id.btn_clear_checksum);
         chkInsecureSsl = (CheckBox) findViewById(R.id.chk_insecure_ssl);
+        chkPureTls = (CheckBox) findViewById(R.id.chk_pure_tls);
+        final SharedPreferences spTls = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        chkPureTls.setChecked(spTls.getBoolean("pref_pure_tls", false));
+        chkPureTls.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean("pref_pure_tls", isChecked).commit();
+            }
+        });
 
         btnDownload = (Button) findViewById(R.id.btn_download);
         btnCancel = (Button) findViewById(R.id.btn_cancel);
@@ -190,37 +202,41 @@ public class MainActivity extends Activity {
         btnAddPreset.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String url = editUrl.getText().toString().trim();
+                final String url = editUrl.getText().toString().trim();
                 if (url.isEmpty()) {
                     Toast.makeText(MainActivity.this, "URL is empty", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                PresetItem candidate = new PresetItem(url);
-                if (presetList.contains(candidate)) {
-                    Toast.makeText(MainActivity.this, R.string.toast_preset_exists, Toast.LENGTH_SHORT).show();
-                    return;
-                }
 
-                // If currently downloaded file belongs to this URL, capture its metadata
+                String defaultName = "";
                 if (lastDownloadedFile != null && lastDownloadedFile.exists()) {
-                    String finalUrl = getFinalDownloadUrl();
-                    if (url.equals(finalUrl) || (currentTemplate != null && url.equals(currentTemplate.getTemplate()))) {
-                        candidate.lastFileName = lastDownloadedFile.getName();
-                        candidate.lastFileSize = lastDownloadedFile.length();
-                        candidate.lastDownloadedAt = System.currentTimeMillis();
-                        candidate.lastSha256 = lastComputedSha256;
-                        if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
-                            candidate.lastSigFingerprint = lastSignatureResult.currentCert.sha256Fingerprint;
-                            candidate.lastAuthor = lastSignatureResult.currentCert.getDisplayAuthor();
-                        }
-                        candidate.lastVersion = extractVersionInfo(lastDownloadedFile);
+                    defaultName = lastDownloadedFile.getName();
+                } else {
+                    int lastSlash = url.lastIndexOf('/');
+                    if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+                        defaultName = url.substring(lastSlash + 1);
                     }
                 }
 
-                presetList.add(candidate);
-                savePresets();
-                renderPresets();
-                Toast.makeText(MainActivity.this, R.string.toast_preset_saved, Toast.LENGTH_SHORT).show();
+                final EditText inputName = new EditText(MainActivity.this);
+                inputName.setText(defaultName);
+                if (defaultName.length() > 0) {
+                    inputName.setSelection(0, defaultName.length());
+                }
+
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle(R.string.dialog_add_preset_title)
+                        .setMessage(R.string.dialog_add_preset_msg)
+                        .setView(inputName)
+                        .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String name = inputName.getText().toString().trim();
+                                saveNewPreset(name, url);
+                            }
+                        })
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show();
             }
         });
 
@@ -312,9 +328,11 @@ public class MainActivity extends Activity {
             });
 
             View contentLayout = row.findViewById(R.id.layout_preset_content);
+            TextView txtName = (TextView) row.findViewById(R.id.txt_preset_name);
             TextView txtUrl = (TextView) row.findViewById(R.id.txt_preset_url);
             TextView txtMeta = (TextView) row.findViewById(R.id.txt_preset_meta);
 
+            txtName.setText(item.getDisplayName());
             txtUrl.setText(item.url);
             txtMeta.setText(item.getMetadataSummary());
 
@@ -326,6 +344,7 @@ public class MainActivity extends Activity {
             };
 
             contentLayout.setOnClickListener(useListener);
+            txtName.setOnClickListener(useListener);
             txtUrl.setOnClickListener(useListener);
 
             Button btnUse = (Button) row.findViewById(R.id.btn_use);
@@ -402,6 +421,12 @@ public class MainActivity extends Activity {
     private void selectAndLoadPreset(PresetItem item, boolean showToast) {
         editUrl.setText(item.url);
         editUrl.setSelection(item.url.length());
+        if (item.lastVersion != null && !item.lastVersion.isEmpty()) {
+            for (Map.Entry<String, EditText> entry : variableInputs.entrySet()) {
+                entry.getValue().setText(item.lastVersion);
+                entry.getValue().setSelection(item.lastVersion.length());
+            }
+        }
         scrollView.smoothScrollTo(0, 0);
         if (showToast) {
             Toast.makeText(MainActivity.this, R.string.toast_preset_loaded, Toast.LENGTH_SHORT).show();
@@ -409,18 +434,40 @@ public class MainActivity extends Activity {
     }
 
     private void promptEditPresetDialog(final PresetItem item) {
-        final EditText input = new EditText(this);
-        input.setText(item.url);
-        input.setSelection(item.url.length());
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad, pad, pad);
+
+        TextView lblName = new TextView(this);
+        lblName.setText(R.string.dialog_edit_preset_name_label);
+        layout.addView(lblName);
+
+        final EditText inputName = new EditText(this);
+        inputName.setHint(R.string.dialog_edit_preset_name_hint);
+        inputName.setText(item.name != null ? item.name : "");
+        layout.addView(inputName);
+
+        TextView lblUrl = new TextView(this);
+        lblUrl.setText(R.string.dialog_edit_preset_url_label);
+        lblUrl.setPadding(0, pad / 2, 0, 0);
+        layout.addView(lblUrl);
+
+        final EditText inputUrl = new EditText(this);
+        inputUrl.setHint(R.string.dialog_edit_preset_url_hint);
+        inputUrl.setText(item.url != null ? item.url : "");
+        layout.addView(inputUrl);
 
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_edit_preset_title)
-                .setView(input)
+                .setView(layout)
                 .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        String newUrl = input.getText().toString().trim();
+                        String newName = inputName.getText().toString().trim();
+                        String newUrl = inputUrl.getText().toString().trim();
                         if (!newUrl.isEmpty()) {
+                            item.name = newName;
                             item.url = newUrl;
                             savePresets();
                             renderPresets();
@@ -454,6 +501,16 @@ public class MainActivity extends Activity {
     private void loadPresets() {
         presetList.clear();
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        int presetsVer = sp.getInt(PREF_PRESETS_VERSION, 0);
+
+        if (presetsVer < CURRENT_PRESETS_VERSION) {
+            presetList.clear();
+            initDefaultPresets();
+            sp.edit().putInt(PREF_PRESETS_VERSION, CURRENT_PRESETS_VERSION).commit();
+            savePresets();
+            return;
+        }
+
         String raw = sp.getString(KEY_PRESETS, null);
         if (raw != null && !raw.trim().isEmpty()) {
             String[] items = raw.split("\n");
@@ -466,12 +523,74 @@ public class MainActivity extends Activity {
         }
 
         if (presetList.isEmpty()) {
-            // Built-in defaults
-            presetList.add(new PresetItem("https://github.com/f-droid/fdroidclient/releases/download/{1}/F-Droid.apk"));
-            presetList.add(new PresetItem("https://archive.org/download/{1}/{2}.apk"));
-            presetList.add(new PresetItem("http://192.168.1.100:8000/apks/{1}.apk"));
+            initDefaultPresets();
             savePresets();
         }
+    }
+
+    private void initDefaultPresets() {
+        presetList.add(new PresetItem(
+                "ReteGet",
+                "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk",
+                "reteget-0.1.0.apk",
+                74510,
+                "0.1.0",
+                1727177644000L,
+                "088aadadd1c6d218a83f5faf6f838a2f6169c456028ec46be6bc7e3f8cefd49c",
+                "F8:14:1C:1F:B4:43:5D:89:12:4D:43:8B:79:84:DE:6B:44:E1:98:A2:BC:60:DE:4A:CF:22:98:81:49:EE:51:75",
+                "ReteGet development"
+        ));
+        presetList.add(new PresetItem(
+                "ReteClock",
+                "https://github.com/rubidus-api/reteclock_apk/releases/download/v{1}/reteclock-{1}.apk",
+                "reteclock-0.50.0.apk",
+                600292,
+                "0.50.0",
+                1727113976000L,
+                "951f81b1f304d9eaa55dcc22c67d66424c7396b78bda0ba90c83d6bd937a5576",
+                "90:44:6B:52:80:AA:4C:E3:4B:FE:8B:33:25:2E:F6:BE:90:2C:74:4D:4F:5A:F2:03:A5:99:5A:4B:BD:4C:64:1D",
+                "reteclock"
+        ));
+        presetList.add(new PresetItem(
+                "ReteKey",
+                "https://github.com/rubidus-api/retekey_apk/releases/download/v{1}/retekey-{1}.apk",
+                "retekey-0.1.199.apk",
+                709437,
+                "0.1.199",
+                1727109906000L,
+                "",
+                "",
+                ""
+        ));
+    }
+
+    private void saveNewPreset(String name, String url) {
+        PresetItem candidate = new PresetItem(name, url);
+        if (presetList.contains(candidate)) {
+            Toast.makeText(MainActivity.this, R.string.toast_preset_exists, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // If currently downloaded file belongs to this URL, capture its metadata
+        if (lastDownloadedFile != null && lastDownloadedFile.exists()) {
+            String finalUrl = getFinalDownloadUrl();
+            if (url.equals(finalUrl) || (currentTemplate != null && url.equals(currentTemplate.getTemplate()))) {
+                candidate.lastFileName = lastDownloadedFile.getName();
+                candidate.lastFileSize = lastDownloadedFile.length();
+                candidate.lastDownloadedAt = System.currentTimeMillis();
+                candidate.lastSha256 = lastComputedSha256;
+                if (lastSignatureResult != null && lastSignatureResult.currentCert != null) {
+                    candidate.lastSigFingerprint = lastSignatureResult.currentCert.sha256Fingerprint;
+                    candidate.lastAuthor = lastSignatureResult.currentCert.getDisplayAuthor();
+                }
+                candidate.lastVersion = extractVersionInfo(lastDownloadedFile);
+            }
+        }
+
+        presetList.add(candidate);
+        savePresets();
+        renderPresets();
+        Toast.makeText(MainActivity.this, R.string.toast_preset_saved, Toast.LENGTH_SHORT).show();
     }
 
     private void savePresets() {
@@ -759,8 +878,9 @@ public class MainActivity extends Activity {
 
         downloadEngine = new DownloadEngine();
         final boolean insecure = chkInsecureSsl.isChecked();
+        final boolean pureTls = chkPureTls.isChecked();
 
-        downloadEngine.download(url, destDir, insecure, new DownloadEngine.Listener() {
+        downloadEngine.download(url, destDir, insecure, pureTls, new DownloadEngine.Listener() {
             @Override
             public void onStart(final String filename, final long totalBytes) {
                 runOnUiThread(new Runnable() {

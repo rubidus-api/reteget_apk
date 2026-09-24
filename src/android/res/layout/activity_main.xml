@@ -112,6 +112,15 @@
             android:text="@string/chk_insecure"
             android:textSize="12sp"
             android:textColor="#666666"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/chk_pure_tls"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/chk_pure_tls"
+            android:textSize="12sp"
+            android:textColor="#1a237e"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout

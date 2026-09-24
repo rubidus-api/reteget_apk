@@ -29,6 +29,8 @@ public final class TlsHelper {
     private static SSLSocketFactory insecureSocketFactory;
     private static X509TrustManager systemTrustManager;
     private static X509TrustManager bundledTrustManager;
+    private static X509TrustManager compositeTm;
+    private static X509TrustManager trustAllTm;
 
     private static final HostnameVerifier ALLOW_ALL_HOSTNAME_VERIFIER = new HostnameVerifier() {
         @Override
@@ -96,7 +98,7 @@ public final class TlsHelper {
             }
 
             // 3. Build composite trust manager
-            X509TrustManager compositeTm = new X509TrustManager() {
+            compositeTm = new X509TrustManager() {
                 @Override
                 public void checkClientTrusted(X509Certificate[] chain, String authType)
                         throws CertificateException {
@@ -144,7 +146,7 @@ public final class TlsHelper {
             compatSocketFactory = new TlsSocketFactoryCompat(sslContext.getSocketFactory());
 
             // 5. Initialize insecure trust-all SSLSocketFactory
-            X509TrustManager trustAllTm = new X509TrustManager() {
+            trustAllTm = new X509TrustManager() {
                 @Override
                 public void checkClientTrusted(X509Certificate[] chain, String authType) {}
 
@@ -163,6 +165,19 @@ public final class TlsHelper {
         } catch (Exception e) {
             System.err.println("TlsHelper.init error: " + e.getMessage());
         }
+    }
+
+    public static X509TrustManager getTrustManager(boolean insecure) {
+        if (insecure) {
+            if (trustAllTm == null) {
+                init(null);
+            }
+            return trustAllTm;
+        }
+        if (compositeTm == null) {
+            init(null);
+        }
+        return compositeTm;
     }
 
     private static SSLContext createSslContext() {

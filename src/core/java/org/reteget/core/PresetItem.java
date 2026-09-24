@@ -11,6 +11,7 @@ import java.util.Locale;
  */
 public class PresetItem {
 
+    public String name;
     public String url;
     public String lastFileName;
     public long lastFileSize = -1;
@@ -24,12 +25,25 @@ public class PresetItem {
     public boolean isSelected = false;
 
     public PresetItem(String url) {
+        this("", url);
+    }
+
+    public PresetItem(String name, String url) {
+        this.name = (name != null) ? name.trim() : "";
         this.url = (url != null) ? url.trim() : "";
     }
 
     public PresetItem(String url, String lastFileName, long lastFileSize,
                       String lastVersion, long lastDownloadedAt,
                       String lastSha256, String lastSigFingerprint, String lastAuthor) {
+        this("", url, lastFileName, lastFileSize, lastVersion, lastDownloadedAt,
+                lastSha256, lastSigFingerprint, lastAuthor);
+    }
+
+    public PresetItem(String name, String url, String lastFileName, long lastFileSize,
+                      String lastVersion, long lastDownloadedAt,
+                      String lastSha256, String lastSigFingerprint, String lastAuthor) {
+        this.name = (name != null) ? name.trim() : "";
         this.url = (url != null) ? url.trim() : "";
         this.lastFileName = lastFileName;
         this.lastFileSize = lastFileSize;
@@ -38,6 +52,20 @@ public class PresetItem {
         this.lastSha256 = lastSha256;
         this.lastSigFingerprint = lastSigFingerprint;
         this.lastAuthor = lastAuthor;
+    }
+
+    public String getDisplayName() {
+        if (name != null && !name.trim().isEmpty()) {
+            return name.trim();
+        }
+        if (lastFileName != null && !lastFileName.trim().isEmpty()) {
+            return lastFileName.trim();
+        }
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+            return url.substring(lastSlash + 1);
+        }
+        return url;
     }
 
     public boolean hasMetadata() {
@@ -107,6 +135,9 @@ public class PresetItem {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
         sb.append("\"url\":").append(escapeJson(url));
+        if (name != null && !name.trim().isEmpty()) {
+            sb.append(",\"name\":").append(escapeJson(name.trim()));
+        }
         if (lastFileName != null && !lastFileName.trim().isEmpty()) {
             sb.append(",\"filename\":").append(escapeJson(lastFileName.trim()));
         }
@@ -144,6 +175,8 @@ public class PresetItem {
 
         PresetItem item = new PresetItem("");
         item.url = extractJsonString(trimmed, "url");
+        item.name = extractJsonString(trimmed, "name");
+        if (item.name == null) item.name = "";
         item.lastFileName = extractJsonString(trimmed, "filename");
         item.lastVersion = extractJsonString(trimmed, "version");
         item.lastSha256 = extractJsonString(trimmed, "sha256");

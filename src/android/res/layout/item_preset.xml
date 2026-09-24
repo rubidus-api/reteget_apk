@@ -26,14 +26,24 @@
         android:clickable="true">
 
         <TextView
+            android:id="@+id/txt_preset_name"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#1a237e"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
             android:id="@+id/txt_preset_url"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#0d47a1"
+            android:textSize="11sp"
+            android:textColor="#0277bd"
             android:maxLines="2"
-            android:ellipsize="middle" />
+            android:ellipsize="middle"
+            android:paddingTop="1dp" />
 
         <TextView
             android:id="@+id/txt_preset_meta"
