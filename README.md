@@ -1,8 +1,10 @@
 # ReteGet
 
-**ReteGet v0.3.3** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.3/reteget-0.3.3.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.3)
+**ReteGet v0.3.4** (latest release) download — [apk (Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.4/reteget-0.3.4.apk) · [release notes](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.4)
 
 **English** · [한국어](README.ko.md)
+
+> **Application id changed in 0.3.4.** ReteGet is now `com.reteget` (it was `org.reteget.apk`), like ReteClock (`com.reteclock`) and ReteKey (`com.retekey`). Android treats it as a new app, so 0.3.3 and older do not update to it: export your settings in the old app, install 0.3.4, import them, then uninstall the old one.
 
 **A lightweight, standalone file and APK downloader for legacy Android devices (Android 2.3+ Gingerbread through Android 4.x KitKat and newer).**
 

@@ -1,0 +1,1 @@
+The application id is now com.reteget (it was org.reteget.apk), to match ReteClock (com.reteclock) and ReteKey (com.retekey). Android treats this as a new app: a copy of 0.3.3 or older installed from GitHub does not update to this version. Export your settings in the old app, install this one, import them, then uninstall the old one. Nothing else changed.

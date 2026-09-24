@@ -29,7 +29,7 @@ echo "==> installing $(basename "$APK")"
 "$ADB" install -r "$APK" < /dev/null
 
 echo "==> launching ReteGet activity"
-"$ADB" shell am start -n org.reteget.apk/.MainActivity < /dev/null >/dev/null
+"$ADB" shell am start -n com.reteget/org.reteget.apk.MainActivity < /dev/null >/dev/null
 sleep 20
 
 echo "==> capturing initial screen with template placeholder"
@@ -57,7 +57,7 @@ echo "==> capturing bottom presets list"
 echo "    saved docs/screenshots/screenshot_presets.png"
 
 echo "==> verify app process is running cleanly"
-"$ADB" shell ps < /dev/null | grep -q "org.reteget.apk" || fail "ReteGet crashed on launch"
+"$ADB" shell ps < /dev/null | grep -q "com.reteget" || fail "ReteGet crashed on launch"
 echo "    ReteGet process is alive: PASS"
 
 echo "==> verify-kitkat complete"

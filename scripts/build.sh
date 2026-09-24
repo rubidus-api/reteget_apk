@@ -76,6 +76,7 @@ echo "==> aapt2 link (against android-$ANDROID_RES_API)"
     -I "$ANDROID_RES_JAR" \
     --manifest "$ROOT/src/android/AndroidManifest.xml" \
     --java "$GEN" \
+    --custom-package org.reteget.apk \
     --min-sdk-version "$MIN_SDK" \
     --target-sdk-version "$TARGET_SDK" \
     --no-version-vectors \

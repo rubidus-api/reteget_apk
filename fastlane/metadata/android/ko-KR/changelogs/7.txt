@@ -1,0 +1,1 @@
+앱 식별자가 com.reteget으로 바뀌었습니다(이전 org.reteget.apk). ReteClock(com.reteclock), ReteKey(com.retekey)와 맞춘 것입니다. 안드로이드는 이것을 새 앱으로 봅니다: GitHub에서 받은 0.3.3 이하 설치본은 이 버전으로 업데이트되지 않습니다. 옛 앱에서 설정을 내보내고, 이 버전을 설치해 가져온 뒤, 옛 앱을 지우세요. 그 밖에 바뀐 것은 없습니다.

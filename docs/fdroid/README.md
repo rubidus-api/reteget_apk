@@ -10,7 +10,7 @@ and can update each other.
 |---|---|
 | Unsigned build | `scripts/build.sh --unsigned` — the whole pipeline, stopping after `zipalign`; never reads a keystore. |
 | Store metadata | `fastlane/metadata/android/{en-US,ko-KR}/` — title, descriptions, icon, feature graphic, screenshots, and a changelog per version **code**. |
-| Build recipe | `docs/fdroid/org.reteget.apk.yml` — the file that goes into `fdroiddata` as `metadata/org.reteget.apk.yml`. |
+| Build recipe | `docs/fdroid/com.reteget.yml` — the file that goes into `fdroiddata` as `metadata/com.reteget.yml`. |
 
 ## Rules that keep the build reproducible
 
