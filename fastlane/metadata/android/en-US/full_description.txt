@@ -1,0 +1,20 @@
+ReteGet downloads files and APKs straight onto old Android phones and tablets — Android 2.3 and newer — without a computer, ADB or an app store.
+
+Old phones are cut off from most of the web. Android 2.3 has no TLS 1.2 at all, and Android 4.1 devices such as the Galaxy Note 2 fail against modern servers with "SSLv3 alert handshake failure". So ReteGet carries its own TLS client, written in plain Java: TLS 1.3 (X25519 or P-256, AES-128-GCM, ECDSA and RSA-PSS server signatures), and TLS 1.2 only for servers without TLS 1.3, with downgrade protection. Because Android 2.3 cannot verify ECDSA certificates such as GitHub's, the app also parses X.509 certificates and validates the chain itself, against the system and the bundled root certificates, and always checks the host name. The system TLS is tried first; the built-in engine takes over when it fails, or always, if you tick the option.
+
+Features
+
+* Download queue at the top of the screen: one download at a time, with the file name, state, URL and a progress bar for each entry. Failed downloads say why and can be retried; finished APKs can be installed from the list. Select all / Delete selected. The list survives closing the app.
+* URL templates: a URL such as .../download/v{1}/app-{1}.apk shows a small field for {1}, so an update is just a new version number.
+* Presets with names, including the rete series (ReteGet, ReteClock, ReteKey) with their expected checksums and signing keys filled in. Use, Edit, Up, Dn and Del on each preset.
+* Checksum check: SHA-256, SHA-1, MD5 and SHA-512, pasted as a bare hash or a sha256sum line.
+* APK signing-key check: warns when an APK is signed by a different key than the installed app or the last download of it.
+* One tap to open the system installer after an APK download.
+* HTTP, HTTPS and passive FTP.
+* Settings export and import (presets, options, signing keys) as a plain text file in the subset of INI and TOML that both read the same way, or through the clipboard.
+* Saves to the system Download folder; when shared storage is unavailable, to the app's own storage, from where APKs can still be installed.
+* Paste and Clear buttons for the URL and the checksum.
+
+Small and self-contained: plain Java and the Android framework, no third-party libraries, a single dex file, built without Gradle.
+
+The option to allow unverified certificates exists for home servers with self-signed certificates; leave it off otherwise.

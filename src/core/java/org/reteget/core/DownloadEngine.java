@@ -174,7 +174,7 @@ public class DownloadEngine {
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setInstanceFollowRedirects(false); // handle manually for HTTP->HTTPS or S3 redirects
-                conn.setRequestProperty("User-Agent", "reteget/0.3.2 (Android Legacy)");
+                conn.setRequestProperty("User-Agent", "reteget/0.3.3 (Android Legacy)");
                 conn.setRequestProperty("Accept-Encoding", "identity"); // Ensure raw Content-Length
 
                 TlsHelper.configureConnection(conn, insecure);
@@ -378,7 +378,7 @@ public class DownloadEngine {
 
                 String req = "GET " + path + " HTTP/1.1\r\n"
                         + "Host: " + host + "\r\n"
-                        + "User-Agent: reteget/0.3.2 (Android Legacy)\r\n"
+                        + "User-Agent: reteget/0.3.3 (Android Legacy)\r\n"
                         + "Accept-Encoding: identity\r\n"
                         + "Connection: close\r\n\r\n";
                 sockOut.write(req.getBytes("US-ASCII"));

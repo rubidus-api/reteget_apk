@@ -26,10 +26,14 @@
 !/scripts/emulator.sh
 !/scripts/verify-kitkat.sh
 
-# The screenshots the README embeds.
+# The screenshots the README embeds, and the F-Droid build recipe with its instructions.
 !/docs/
 /docs/*
 !/docs/screenshots/
+!/docs/fdroid/
+
+# Store metadata F-Droid reads from the source tree (title, descriptions, images, changelogs).
+!/fastlane/
 
 # Tests
 !/tests/

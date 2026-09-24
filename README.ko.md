@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.3.2** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.2/reteget-0.3.2.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.2)
+**ReteGet v0.3.3** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.3/reteget-0.3.3.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.3)
 
 [English](README.md) · **한국어**
 

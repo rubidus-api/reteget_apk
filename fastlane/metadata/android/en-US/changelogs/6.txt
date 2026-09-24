@@ -1,0 +1,1 @@
+First release on F-Droid. The app is the same as 0.3.2: its own TLS 1.3 engine for Android 2.3 and newer, the download queue, presets for the rete series, and settings export and import. This version is built with JDK 21 so that F-Droid's build of the source is byte-for-byte the APK published on GitHub, and both carry the same signature.

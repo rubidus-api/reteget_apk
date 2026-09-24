@@ -208,6 +208,29 @@ def render_themed_preview(size):
     return plate
 
 
+# F-Droid reads the store icon and the feature graphic from the fastlane tree.
+FASTLANE = os.path.join(ROOT, "fastlane", "metadata", "android", "en-US", "images")
+STORE_ICON_SIZE = 512
+FEATURE_SIZE = (1024, 500)
+
+
+def render_feature_graphic():
+    """The icon on the left, the name and what it does on the right, on the plate colour."""
+    w, h = FEATURE_SIZE
+    big = SUPERSAMPLE // 2
+    image = Image.new("RGBA", (w * big, h * big), PLATE)
+    icon = render(int(h * 0.62)).resize((int(h * 0.62) * big, int(h * 0.62) * big), Image.LANCZOS)
+    image.alpha_composite(icon, (int(w * 0.07) * big, int(h * 0.19) * big))
+    draw = ImageDraw.Draw(image)
+    title = load_font(int(h * 0.20) * big, BOLD_FONT_CANDIDATES)
+    line = load_font(int(h * 0.075) * big, FONT_CANDIDATES)
+    x = int(w * 0.44) * big
+    draw.text((x, int(h * 0.24) * big), "ReteGet", font=title, fill=LETTERING)
+    draw.text((x, int(h * 0.52) * big), "Downloads for old Android,", font=line, fill=LETTERING)
+    draw.text((x, int(h * 0.62) * big), "with its own TLS 1.3", font=line, fill=LETTERING)
+    return image.resize(FEATURE_SIZE, Image.LANCZOS)
+
+
 def write(image, path):
     """Saves as an indexed PNG with per-entry alpha: the drawing has two colours plus their
     anti-aliased edges, so 64 palette entries keep the edges smooth at a third of the size."""
@@ -233,6 +256,8 @@ def main():
         d = os.path.join(RES, "drawable-" + density)
         write(render_layer(size, LETTERING, True), os.path.join(d, "ic_launcher_foreground.png"))
         write(render_layer(size, (0, 0, 0, 255), False), os.path.join(d, "ic_launcher_monochrome.png"))
+    write(render(STORE_ICON_SIZE), os.path.join(FASTLANE, "icon.png"))
+    write(render_feature_graphic(), os.path.join(FASTLANE, "featureGraphic.png"))
     write(render(README_SIZE), os.path.join(README_DIR, "icon.png"))
     write(render_themed_preview(README_SIZE), os.path.join(README_DIR, "icon-monochrome.png"))
     for density, size in CHECK_DENSITIES.items():
