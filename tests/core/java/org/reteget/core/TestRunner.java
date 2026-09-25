@@ -48,6 +48,7 @@ public class TestRunner {
         testIconResources();
         testSettingsBundle();
         testIndexMatcher();
+        testUserAgent();
 
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
@@ -674,6 +675,14 @@ public class TestRunner {
             rejected = true;
         }
         assertTrue("settings: a file that is not ReteGet settings is refused", rejected);
+    }
+
+    private static void testUserAgent() {
+        DownloadEngine.setAppVersion(null);
+        assertEquals("user agent without a version", "reteget (Android Legacy)", DownloadEngine.userAgent());
+        DownloadEngine.setAppVersion("0.4.1");
+        assertEquals("user agent carries the app version", "reteget/0.4.1 (Android Legacy)", DownloadEngine.userAgent());
+        DownloadEngine.setAppVersion("");
     }
 
     private static void testIndexMatcher() {

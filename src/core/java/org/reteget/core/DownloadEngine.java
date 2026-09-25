@@ -77,6 +77,17 @@ public class DownloadEngine {
      * Protocol, cipher and key exchange of the last connection made by the in-tree TLS
      * engine, or null when the download used the system TLS stack.
      */
+    private static volatile String appVersion = "";
+
+    /** The app's version for the User-Agent; set once at start-up from the package's versionName. */
+    public static void setAppVersion(String version) {
+        appVersion = version == null ? "" : version.trim();
+    }
+
+    static String userAgent() {
+        return (appVersion.length() > 0 ? "reteget/" + appVersion : "reteget") + " (Android Legacy)";
+    }
+
     public String getLastTlsSummary() {
         return lastTlsSummary;
     }
@@ -174,7 +185,7 @@ public class DownloadEngine {
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setInstanceFollowRedirects(false); // handle manually for HTTP->HTTPS or S3 redirects
-                conn.setRequestProperty("User-Agent", "reteget/0.3.5 (Android Legacy)");
+                conn.setRequestProperty("User-Agent", userAgent());
                 conn.setRequestProperty("Accept-Encoding", "identity"); // Ensure raw Content-Length
 
                 TlsHelper.configureConnection(conn, insecure);
@@ -378,7 +389,7 @@ public class DownloadEngine {
 
                 String req = "GET " + path + " HTTP/1.1\r\n"
                         + "Host: " + host + "\r\n"
-                        + "User-Agent: reteget/0.3.5 (Android Legacy)\r\n"
+                        + "User-Agent: " + userAgent() + "\r\n"
                         + "Accept-Encoding: identity\r\n"
                         + "Connection: close\r\n\r\n";
                 sockOut.write(req.getBytes("US-ASCII"));

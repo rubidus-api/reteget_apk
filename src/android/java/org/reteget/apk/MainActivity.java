@@ -117,6 +117,11 @@ public class MainActivity extends Activity {
         // Bypass FileUriExposedException on Android 7.0+ (API 24+)
         disableStrictModeFileUriExposure();
 
+        try {
+            DownloadEngine.setAppVersion(getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+        } catch (Exception ignored) {
+        }
+
         // Initialize TLS 1.2 and bundled modern Root CAs
         initTlsCerts();
 
