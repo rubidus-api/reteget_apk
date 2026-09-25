@@ -104,8 +104,8 @@
     <string name="settings_import_confirm">Import %1$d presets (%2$d new, %3$d changed), the options and %4$d signing keys? Presets only on this phone stay.</string>
     <string name="settings_imported">Settings imported</string>
     <string name="settings_import_failed">Could not import: %1$s</string>
-    <string name="chk_auto_upgrade">Upgrade installed apps without asking when the signing key matches</string>
-    <string name="upgrade_started">Upgrading %1$s to %2$s…</string>
+    <string name="chk_auto_upgrade">Upgrades with the same signing key: open the installer without asking first</string>
+    <string name="upgrade_started">Upgrade of %1$s to %2$s: confirm in the installer</string>
     <string name="install_done">%1$s installed</string>
     <string name="install_failed">Could not install %1$s: %2$s</string>
     <string name="btn_latest">Latest</string>

@@ -104,8 +104,8 @@
     <string name="settings_import_confirm">프리셋 %1$d개(새 것 %2$d, 바뀐 것 %3$d), 옵션, 서명 키 %4$d개를 가져올까요? 이 폰에만 있는 프리셋은 그대로 남습니다.</string>
     <string name="settings_imported">설정을 가져왔습니다</string>
     <string name="settings_import_failed">가져오지 못했습니다: %1$s</string>
-    <string name="chk_auto_upgrade">서명 키가 같으면 설치된 앱을 묻지 않고 업그레이드</string>
-    <string name="upgrade_started">%1$s을(를) %2$s(으)로 업그레이드하는 중…</string>
+    <string name="chk_auto_upgrade">서명 키가 같은 업그레이드는 묻지 않고 설치 화면 열기</string>
+    <string name="upgrade_started">%1$s을(를) %2$s(으)로 업그레이드: 설치 화면에서 확인하세요</string>
     <string name="install_done">%1$s 설치 완료</string>
     <string name="install_failed">%1$s을(를) 설치하지 못했습니다: %2$s</string>
     <string name="btn_latest">Latest</string>

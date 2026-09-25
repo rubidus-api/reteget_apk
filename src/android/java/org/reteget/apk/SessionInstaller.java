@@ -15,19 +15,15 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 
 /**
- * Installs an APK through a PackageInstaller session (Android 5+), and upgrades an installed app
- * without the confirmation screen where Android allows it.
+ * Installs an APK through a PackageInstaller session (Android 5+), always with the system's
+ * confirmation screen.
  *
  * <p>A session, not ACTION_VIEW on the file: the system installer stopped accepting file://
- * addresses (Android 10 has no activity for them), and a session also records ReteGet as the
- * app's installer, which the no-confirmation upgrade below requires.
+ * addresses (Android 10 has no activity for them). The session answers "pending user action"
+ * and this shows the system confirmation from that answer.
  *
- * <p>Android 12 (API 31) lets an installer update an app with no user action when: the
- * installer holds REQUEST_INSTALL_PACKAGES (and, from Android 13, declares
- * UPDATE_PACKAGES_WITHOUT_USER_ACTION); it is the app's installer of record, or the app is
- * the installer itself; and the new APK targets a recent enough API level. When any of that is
- * not met, the system answers "pending user action" and this shows its confirmation screen, so
- * the worst case is the ordinary one-tap install. Older Android never allows it.
+ * <p>Android 12+ could skip that screen for upgrades (USER_ACTION_NOT_REQUIRED); ReteGet does
+ * not ask for it: every install and upgrade is confirmed by the user (owner's decision, D020).
  *
  * <p>PackageInstaller is reached by reflection because the app compiles against API 19; below
  * API 21 none of it is called.
@@ -43,7 +39,6 @@ public final class SessionInstaller {
     private static final int STATUS_SUCCESS = 0;
     private static final int MODE_FULL_INSTALL = 1;
     private static final int USER_ACTION_REQUIRED = 1;
-    private static final int USER_ACTION_NOT_REQUIRED = 2;
     private static final int FLAG_MUTABLE = 0x02000000;
 
     private SessionInstaller() {}
@@ -52,18 +47,11 @@ public final class SessionInstaller {
         return Build.VERSION.SDK_INT >= 21;
     }
 
-    /** Whether Android may skip the confirmation for an upgrade (it still decides). */
-    public static boolean canSkipConfirmation() {
-        return Build.VERSION.SDK_INT >= 31;
-    }
-
     /**
-     * Hands the APK to a PackageInstaller session; with {@code noConfirmation} it asks Android to
-     * skip the confirmation screen (see the class notes). Returns false when the session could
-     * not be started; the caller then falls back to the installer screen.
+     * Hands the APK to a PackageInstaller session, which then asks the user to confirm. Returns
+     * false when the session could not be started; the caller then falls back to ACTION_VIEW.
      */
-    public static boolean start(Context ctx, File apk, String packageName, String label,
-                                boolean noConfirmation) {
+    public static boolean start(Context ctx, File apk, String packageName, String label) {
         if (!isSupported()) return false;
         Object session = null;
         try {
@@ -71,9 +59,9 @@ public final class SessionInstaller {
             Object installer = pm.getClass().getMethod("getPackageInstaller").invoke(pm);
             Class<?> paramsClass = Class.forName("android.content.pm.PackageInstaller$SessionParams");
             Object params = paramsClass.getConstructor(int.class).newInstance(MODE_FULL_INSTALL);
-            if (canSkipConfirmation()) {
-                paramsClass.getMethod("setRequireUserAction", int.class).invoke(params,
-                        noConfirmation ? USER_ACTION_NOT_REQUIRED : USER_ACTION_REQUIRED);
+            if (Build.VERSION.SDK_INT >= 31) {
+                // Explicit: Android 12+ would otherwise decide by itself for some upgrades.
+                paramsClass.getMethod("setRequireUserAction", int.class).invoke(params, USER_ACTION_REQUIRED);
             }
             if (packageName != null) {
                 paramsClass.getMethod("setAppPackageName", String.class).invoke(params, packageName);

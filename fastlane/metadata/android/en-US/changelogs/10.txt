@@ -1,0 +1,1 @@
+Fixed: plain http:// downloads failed on Android 9 and newer ("Cleartext HTTP traffic not permitted"). Upgrades are always confirmed on the system's screen: ReteGet no longer asks Android 12+ to skip it (the option now reads: open the installer without asking first). The User-Agent carries the installed version.

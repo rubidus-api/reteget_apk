@@ -10,7 +10,7 @@ Features
 * Latest: a preset can name an index page (a directory listing, or GitHub's releases API); Latest downloads the newest file there that fits the preset URL, in Windows Explorer order (0.3.10 after 0.3.9). The rete presets come with it.
 * Checksum check: SHA-256, SHA-1, MD5 and SHA-512, pasted as a bare hash or a sha256sum line.
 * APK signing-key check: warns when an APK is signed by a different key than the installed app or the last download of it.
-* Installs APKs with the system installer, and upgrades an installed app without asking when the new file has the same signing key and a newer version (Android 12+ may skip its own confirmation too).
+* Installs APKs with the system installer; for an upgrade with the same signing key and a newer version it opens the installer right away, and you confirm there.
 * HTTP, HTTPS and passive FTP.
 * Settings export and import (presets, options, signing keys) as a plain text file in the subset of INI and TOML that both read the same way, or through the clipboard.
 * Saves to the system Download folder; when shared storage is unavailable, to the app's own storage, from where APKs can still be installed.

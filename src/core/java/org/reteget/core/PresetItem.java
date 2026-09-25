@@ -288,7 +288,7 @@ public class PresetItem {
         java.util.List<PresetItem> list = new java.util.ArrayList<PresetItem>();
         list.add(rete("ReteGet", "reteget_apk",
                 "reteget_apk/releases/download/v{1}/reteget-{1}.apk",
-                "reteget-0.4.0.apk", -1, "0.4.0", 0L, "",
+                "reteget-0.4.1.apk", -1, "0.4.1", 0L, "",
                 "9F:98:92:2B:44:4F:3C:51:88:D7:F7:8C:F7:3C:4C:F8:36:0B:DB:B3:98:89:7C:3A:25:58:BF:28:DB:A6:4D:52",
                 "ReteGet"));
         list.add(rete("ReteClock", "reteclock_apk",

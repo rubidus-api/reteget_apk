@@ -1882,10 +1882,9 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * An upgrade needs no question when the option is on, the file is signed with the same key as
-     * the installed app, its checksum raised no warning (checked by the caller), and its version
-     * is newer. Android 12+ may then install it with no screen at all (see SessionInstaller);
-     * otherwise the system installer opens straight away and needs one tap.
+     * An upgrade skips ReteGet's own "Install now?" when the option is on, the file is signed with
+     * the same key as the installed app, its checksum raised no warning (checked by the caller),
+     * and its version is newer: the system installer opens at once, and the user confirms there.
      * Returns false when this is not such an upgrade.
      */
     private boolean startUpgrade(File apkFile) {
@@ -1909,7 +1908,7 @@ public class MainActivity extends Activity {
         Toast.makeText(this, getString(R.string.upgrade_started, label,
                 archive.versionName != null ? archive.versionName : String.valueOf(archive.versionCode)),
                 Toast.LENGTH_SHORT).show();
-        if (!SessionInstaller.start(this, apkFile, archive.packageName, label, true)) {
+        if (!SessionInstaller.start(this, apkFile, archive.packageName, label)) {
             launchViewInstaller(apkFile);
         }
         return true;
@@ -1942,7 +1941,7 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {
         }
-        if (!SessionInstaller.start(this, apkFile, pkg, label, false)) {
+        if (!SessionInstaller.start(this, apkFile, pkg, label)) {
             launchViewInstaller(apkFile);
         }
     }
