@@ -47,6 +47,7 @@ public class TestRunner {
         testDownloadQueue();
         testIconResources();
         testSettingsBundle();
+        testIndexMatcher();
 
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
@@ -422,8 +423,8 @@ public class TestRunner {
                 d.get(2).url.endsWith("-legacy.apk") && !d.get(3).url.endsWith("-legacy.apk"));
         UrlTemplate t = new UrlTemplate(d.get(1).url);
         assertEquals("ReteClock template resolves to the release asset",
-                "https://github.com/rubidus-api/reteclock_apk/releases/download/v0.50.0/reteclock-0.50.0.apk",
-                t.resolve(java.util.Collections.singletonMap("1", "0.50.0")));
+                "https://github.com/rubidus-api/reteclock_apk/releases/download/v0.51.0/reteclock-0.51.0.apk",
+                t.resolve(java.util.Collections.singletonMap("1", d.get(1).lastVersion)));
 
         List<PresetItem> stored = new java.util.ArrayList<PresetItem>();
         stored.add(new PresetItem("Old ReteKey",
@@ -623,12 +624,14 @@ public class TestRunner {
         SettingsBundle b = new SettingsBundle();
         b.appVersion = "0.3.2";
         b.builtInTls = Boolean.TRUE;
+        b.autoUpgrade = Boolean.FALSE;
         b.presets.addAll(PresetItem.defaults());
         b.presets.add(new PresetItem("Mirror \"A\" \\ 한글", "https://example.org/{1}/a.apk"));
         b.signers.put("com.reteclock", new String[] { "90:44:6B", "reteclock" });
         String file = b.write();
         SettingsBundle r = SettingsBundle.parse(file);
         assertEquals("settings: option survives", Boolean.TRUE, r.builtInTls);
+        assertEquals("settings: auto_upgrade survives", Boolean.FALSE, r.autoUpgrade);
         assertEquals("settings: all presets survive", b.presets.size(), r.presets.size());
         assertEquals("settings: quotes, backslash and Hangul in a name survive", "Mirror \"A\" \\ 한글", r.presets.get(4).name);
         assertEquals("settings: preset record survives", PresetItem.defaults().get(1).toJson(), r.presets.get(1).toJson());
@@ -671,6 +674,54 @@ public class TestRunner {
             rejected = true;
         }
         assertTrue("settings: a file that is not ReteGet settings is refused", rejected);
+    }
+
+    private static void testIndexMatcher() {
+        assertTrue("natural order: 0.3.9 before 0.3.10", IndexMatcher.naturalCompare("0.3.9", "0.3.10") < 0);
+        assertTrue("natural order: 0.1.199 before 0.1.200", IndexMatcher.naturalCompare("a-0.1.199.apk", "a-0.1.200.apk") < 0);
+        assertTrue("natural order: case ignored, file2 before File10", IndexMatcher.naturalCompare("file2", "File10") < 0);
+        assertTrue("natural order: 007 and 7 are close, fewer zeros first", IndexMatcher.naturalCompare("7", "007") < 0);
+        assertEquals("natural order: equal strings", 0, IndexMatcher.naturalCompare("v1.2", "V1.2"));
+        assertTrue("natural order: a prefix sorts first", IndexMatcher.naturalCompare("app-1", "app-1.0") < 0);
+
+        String rk = "https://github.com/rubidus-api/retekey_apk/releases/download/v";
+        String json = "[{\"tag_name\":\"v0.1.200\",\"assets\":["
+                + "{\"browser_download_url\":\"" + rk + "0.1.200/retekey-0.1.200-legacy.apk\"},"
+                + "{\"browser_download_url\":\"" + rk + "0.1.200/retekey-0.1.200.apk\"},"
+                + "{\"browser_download_url\":\"" + rk + "0.1.200/retekey-0.1.200.apk.sig\"}]},"
+                + "{\"tag_name\":\"v0.1.99\",\"assets\":["
+                + "{\"browser_download_url\":\"" + rk.replace("/", "\\/") + "0.1.99/retekey-0.1.99.apk\"},"
+                + "{\"browser_download_url\":\"" + rk + "0.1.98/retekey-0.1.99.apk\"}]}]";
+        String pattern = rk + "{1}/retekey-{1}.apk";
+        List<IndexMatcher.Match> all = IndexMatcher.findAll(json, "https://api.github.com/repos/x/y/releases", pattern);
+        assertEquals("index: JSON addresses found, legacy, .sig and mismatched {1} left out (\\/ read as /)",
+                2, all.size());
+        IndexMatcher.Match latest = IndexMatcher.latest(json, null, pattern);
+        assertEquals("index: newest by Windows order, not page order or plain text order",
+                rk + "0.1.200/retekey-0.1.200.apk", latest.url);
+        assertEquals("index: {1} gives the version", "0.1.200", latest.version);
+        assertEquals("index: the -legacy pattern takes only legacy builds", "0.1.200",
+                IndexMatcher.latest(json, null, rk + "{1}/retekey-{1}-legacy.apk").version);
+
+        String listing = "<html><body><a href=\"../\">../</a>"
+                + "<a href=\"tool-1.9.zip\">tool-1.9.zip</a> <a href='tool-1.10.zip'>tool-1.10.zip</a>"
+                + "<a href=/pub/tool/tool-1.2.zip>old</a>"
+                + "<a href=\"tool-1.11.zip?raw=1&amp;x=2\">query</a><a href=\"tool-2.0.tar.gz\">tar</a></body></html>";
+        IndexMatcher.Match z = IndexMatcher.latest(listing, "https://example.org/pub/tool/", "https://example.org/pub/tool/tool-{1}.zip");
+        assertEquals("index: relative links resolved against the page, 1.10 after 1.9",
+                "https://example.org/pub/tool/tool-1.10.zip", z.url);
+        assertEquals("index: * stays within one path segment", 4,
+                IndexMatcher.findAll(listing, "https://example.org/pub/tool/", "https://example.org/pub/*/tool-*").size());
+        assertEquals("index: nothing fits gives null", null,
+                IndexMatcher.latest(listing, "https://example.org/pub/tool/", "https://example.org/pub/tool/other-{1}.apk"));
+
+        PresetItem p = PresetItem.defaults().get(3);
+        assertTrue("index: built-in presets carry the GitHub releases API as index",
+                p.index.startsWith("https://api.github.com/repos/rubidus-api/retekey_apk/releases"));
+        PresetItem back = PresetItem.fromJson(p.toJson());
+        assertEquals("index: survives the stored JSON", p.index, back.index);
+        assertEquals("index: a preset without one stays empty", "",
+                PresetItem.fromJson(new PresetItem("x", "https://a/b.apk").toJson()).index);
     }
 
     private static void testPureGcmEncryptionDecryption() {

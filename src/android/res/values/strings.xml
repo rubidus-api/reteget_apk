@@ -30,7 +30,7 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">Saved Presets</string>
-    <string name="lbl_presets_hint">Save (next to Download) keeps the URL above as a preset. Tap a preset (or Use) to load it back; Edit (or press and hold the preset) changes its name and URL; Up and Dn reorder; Del deletes. Import and Export move all settings (presets, options, signing keys) through a file in the Download folder or the clipboard.</string>
+    <string name="lbl_presets_hint">Save (next to Download) keeps the URL above as a preset. Tap a preset (or Use) to load it back; Latest (on presets with an index page) finds the newest version there and downloads it; Edit (or press and hold the preset) changes its name, URL and index page; Up and Dn reorder; Del deletes. Import and Export move all settings (presets, options, signing keys) through a file in the Download folder or the clipboard.</string>
     <string name="btn_add_preset">Save</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
@@ -38,7 +38,7 @@
     <string name="btn_move_down">↓</string>
     <string name="btn_delete">Delete</string>
     <string name="btn_delete_selected">Delete selected (%1$d)</string>
-    <string name="dialog_edit_preset_title">Edit name and URL</string>
+    <string name="dialog_edit_preset_title">Edit preset</string>
     <string name="dialog_edit_preset_name_label">Name:</string>
     <string name="dialog_edit_preset_name_hint">Preset name (e.g. ReteGet)</string>
     <string name="dialog_edit_preset_url_label">Download URL:</string>
@@ -104,4 +104,16 @@
     <string name="settings_import_confirm">Import %1$d presets (%2$d new, %3$d changed), the options and %4$d signing keys? Presets only on this phone stay.</string>
     <string name="settings_imported">Settings imported</string>
     <string name="settings_import_failed">Could not import: %1$s</string>
+    <string name="chk_auto_upgrade">Upgrade installed apps without asking when the signing key matches</string>
+    <string name="upgrade_started">Upgrading %1$s to %2$s…</string>
+    <string name="install_done">%1$s installed</string>
+    <string name="install_failed">Could not install %1$s: %2$s</string>
+    <string name="btn_latest">Latest</string>
+    <string name="dialog_edit_preset_index_label">Index page (optional):</string>
+    <string name="dialog_edit_preset_index_hint">Page listing the downloads; the URL above is then the pattern, where {1} is the version and * any text</string>
+    <string name="latest_looking">Looking for the newest %1$s…</string>
+    <string name="latest_found">Newest: %1$s — added to the queue</string>
+    <string name="latest_none">Nothing on %1$s fits the preset URL</string>
+    <string name="latest_failed">Could not read %1$s: %2$s</string>
+    <string name="preset_index_label">latest from</string>
 </resources>

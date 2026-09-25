@@ -30,7 +30,7 @@
 
     <!-- Preset strings -->
     <string name="lbl_presets_title">저장된 프리셋 목록</string>
-    <string name="lbl_presets_hint">다운로드 옆의 저장은 위 주소를 프리셋으로 남깁니다. 항목을 누르거나 Use로 다시 불러오고, Edit(또는 항목 길게 누르기)로 이름·주소를 바꾸고, Up·Dn으로 순서를 바꾸고, Del로 지웁니다. 가져오기·내보내기는 모든 설정(프리셋, 옵션, 서명 키)을 다운로드 폴더의 파일이나 클립보드로 옮깁니다.</string>
+    <string name="lbl_presets_hint">다운로드 옆의 저장은 위 주소를 프리셋으로 남깁니다. 항목을 누르거나 Use로 다시 불러오고, Latest(찾아볼 페이지가 있는 프리셋)는 그 페이지에서 가장 새 버전을 찾아 받고, Edit(또는 항목 길게 누르기)로 이름·주소·찾아볼 페이지를 바꾸고, Up·Dn으로 순서를 바꾸고, Del로 지웁니다. 가져오기·내보내기는 모든 설정(프리셋, 옵션, 서명 키)을 다운로드 폴더의 파일이나 클립보드로 옮깁니다.</string>
     <string name="btn_add_preset">저장</string>
     <string name="btn_use_preset">▲</string>
     <string name="btn_edit">✎</string>
@@ -38,7 +38,7 @@
     <string name="btn_move_down">↓</string>
     <string name="btn_delete">삭제</string>
     <string name="btn_delete_selected">선택 삭제 (%1$d)</string>
-    <string name="dialog_edit_preset_title">이름·주소 편집</string>
+    <string name="dialog_edit_preset_title">프리셋 편집</string>
     <string name="dialog_edit_preset_name_label">이름:</string>
     <string name="dialog_edit_preset_name_hint">프리셋 이름 (예: ReteGet)</string>
     <string name="dialog_edit_preset_url_label">다운로드 주소:</string>
@@ -104,4 +104,16 @@
     <string name="settings_import_confirm">프리셋 %1$d개(새 것 %2$d, 바뀐 것 %3$d), 옵션, 서명 키 %4$d개를 가져올까요? 이 폰에만 있는 프리셋은 그대로 남습니다.</string>
     <string name="settings_imported">설정을 가져왔습니다</string>
     <string name="settings_import_failed">가져오지 못했습니다: %1$s</string>
+    <string name="chk_auto_upgrade">서명 키가 같으면 설치된 앱을 묻지 않고 업그레이드</string>
+    <string name="upgrade_started">%1$s을(를) %2$s(으)로 업그레이드하는 중…</string>
+    <string name="install_done">%1$s 설치 완료</string>
+    <string name="install_failed">%1$s을(를) 설치하지 못했습니다: %2$s</string>
+    <string name="btn_latest">Latest</string>
+    <string name="dialog_edit_preset_index_label">찾아볼 페이지 (선택):</string>
+    <string name="dialog_edit_preset_index_hint">다운로드 목록이 있는 페이지. 이때 위 주소는 패턴이 되며 {1}은 버전, *는 아무 글자</string>
+    <string name="latest_looking">가장 새 %1$s 찾는 중…</string>
+    <string name="latest_found">가장 새 것: %1$s — 큐에 넣었습니다</string>
+    <string name="latest_none">%1$s에서 프리셋 주소에 맞는 것이 없습니다</string>
+    <string name="latest_failed">%1$s을(를) 읽지 못했습니다: %2$s</string>
+    <string name="preset_index_label">최신 찾을 곳</string>
 </resources>

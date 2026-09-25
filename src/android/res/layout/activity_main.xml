@@ -210,6 +210,15 @@
             android:text="@string/chk_pure_tls"
             android:textSize="12sp"
             android:textColor="#1a237e"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/chk_auto_upgrade"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/chk_auto_upgrade"
+            android:textSize="12sp"
+            android:textColor="#1b5e20"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout

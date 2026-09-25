@@ -27,14 +27,15 @@
     </style>
 
     <!-- A preset or queue action: a short word in a bordered compact button. -->
+    <!-- Six of these (Latest Use Edit Up Dn Del) plus the check box fit a 320dp-wide phone. -->
     <style name="PresetAction">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginLeft">4dp</item>
-        <item name="android:minWidth">40dp</item>
+        <item name="android:layout_marginLeft">2dp</item>
+        <item name="android:minWidth">32dp</item>
         <item name="android:minHeight">0dp</item>
-        <item name="android:paddingLeft">8dp</item>
-        <item name="android:paddingRight">8dp</item>
+        <item name="android:paddingLeft">4dp</item>
+        <item name="android:paddingRight">4dp</item>
         <item name="android:paddingTop">3dp</item>
         <item name="android:paddingBottom">3dp</item>
         <item name="android:gravity">center</item>

@@ -13,6 +13,11 @@ public class PresetItem {
 
     public String name;
     public String url;
+    /**
+     * Optional page to look for the newest download on (see {@link IndexMatcher}); then
+     * {@link #url} is the pattern the addresses on that page must fit. Empty when unused.
+     */
+    public String index = "";
     public String lastFileName;
     public long lastFileSize = -1;
     public String lastVersion;
@@ -66,6 +71,10 @@ public class PresetItem {
             return url.substring(lastSlash + 1);
         }
         return url;
+    }
+
+    public boolean hasIndex() {
+        return index != null && index.trim().length() > 0;
     }
 
     public boolean hasMetadata() {
@@ -138,6 +147,9 @@ public class PresetItem {
         if (name != null && !name.trim().isEmpty()) {
             sb.append(",\"name\":").append(escapeJson(name.trim()));
         }
+        if (hasIndex()) {
+            sb.append(",\"index\":").append(escapeJson(index.trim()));
+        }
         if (lastFileName != null && !lastFileName.trim().isEmpty()) {
             sb.append(",\"filename\":").append(escapeJson(lastFileName.trim()));
         }
@@ -177,6 +189,8 @@ public class PresetItem {
         item.url = extractJsonString(trimmed, "url");
         item.name = extractJsonString(trimmed, "name");
         if (item.name == null) item.name = "";
+        item.index = extractJsonString(trimmed, "index");
+        if (item.index == null) item.index = "";
         item.lastFileName = extractJsonString(trimmed, "filename");
         item.lastVersion = extractJsonString(trimmed, "version");
         item.lastSha256 = extractJsonString(trimmed, "sha256");
@@ -258,43 +272,56 @@ public class PresetItem {
     }
 
     /** Version of the built-in preset list; raising it merges the defaults again on upgrade. */
-    public static final int DEFAULTS_VERSION = 9;
+    public static final int DEFAULTS_VERSION = 10;
 
     /** URL prefix shared by every built-in preset (the rete series on GitHub Releases). */
     public static final String RETE_RELEASES = "https://github.com/rubidus-api/";
 
     /**
-     * Built-in presets: the rete series apps, as version templates on GitHub Releases.
+     * Built-in presets: the rete series apps, as version templates on GitHub Releases, each
+     * with the release list as its index page so Latest finds the newest version.
      * Metadata is that of the latest release when this list was written, so the checksum
      * and signing-key continuity checks work from the first download. ReteGet's own entry
      * carries only the signing key: a build cannot know its own checksum.
      */
     public static java.util.List<PresetItem> defaults() {
         java.util.List<PresetItem> list = new java.util.ArrayList<PresetItem>();
-        list.add(new PresetItem("ReteGet",
-                RETE_RELEASES + "reteget_apk/releases/download/v{1}/reteget-{1}.apk",
-                "reteget-0.3.5.apk", -1, "0.3.5", 0L, "",
+        list.add(rete("ReteGet", "reteget_apk",
+                "reteget_apk/releases/download/v{1}/reteget-{1}.apk",
+                "reteget-0.4.0.apk", -1, "0.4.0", 0L, "",
                 "9F:98:92:2B:44:4F:3C:51:88:D7:F7:8C:F7:3C:4C:F8:36:0B:DB:B3:98:89:7C:3A:25:58:BF:28:DB:A6:4D:52",
                 "ReteGet"));
-        list.add(new PresetItem("ReteClock",
-                RETE_RELEASES + "reteclock_apk/releases/download/v{1}/reteclock-{1}.apk",
-                "reteclock-0.50.0.apk", 600292, "0.50.0", 1790185976000L,
-                "951f81b1f304d9eaa55dcc22c67d66424c7396b78bda0ba90c83d6bd937a5576",
+        list.add(rete("ReteClock", "reteclock_apk",
+                "reteclock_apk/releases/download/v{1}/reteclock-{1}.apk",
+                "reteclock-0.51.0.apk", 612580, "0.51.0", 1790304417000L,
+                "169cc7dd5bfa25fc175873a6d05342147ce9b46e3ef4595d6db98e3a574d84f8",
                 "90:44:6B:52:80:AA:4C:E3:4B:FE:8B:33:25:2E:F6:BE:90:2C:74:4D:4F:5A:F2:03:A5:99:5A:4B:BD:4C:64:1D",
                 "reteclock"));
-        list.add(new PresetItem("ReteKey (Android 4.0+)",
-                RETE_RELEASES + "retekey_apk/releases/download/v{1}/retekey-{1}-legacy.apk",
-                "retekey-0.1.199-legacy.apk", 570754, "0.1.199", 1790181906000L,
-                "5f1bfb999143c9c420801a6b6652dc0933eec64104dd58dced0dcf6f031d1c9a",
+        list.add(rete("ReteKey (Android 4.0+)", "retekey_apk",
+                "retekey_apk/releases/download/v{1}/retekey-{1}-legacy.apk",
+                "retekey-0.2.0-legacy.apk", 573025, "0.2.0", 1790308592000L,
+                "a53d0b460fe20838dbdc272e2b8173a521dfe0360dcf550284ed1ce10781ccf7",
                 "9E:DF:10:F8:08:8E:6E:EE:CE:98:31:68:7F:DE:92:DC:B7:37:C7:74:F1:D3:9E:C3:7C:59:69:05:AE:02:0C:35",
                 "ReteKey"));
-        list.add(new PresetItem("ReteKey (Android 9+)",
-                RETE_RELEASES + "retekey_apk/releases/download/v{1}/retekey-{1}.apk",
-                "retekey-0.1.199.apk", 709437, "0.1.199", 1790181906000L,
-                "3da307beb602222d4ab7ce88284c596e934a3f0f36c6711905e7cc03a0f2716e",
+        list.add(rete("ReteKey (Android 9+)", "retekey_apk",
+                "retekey_apk/releases/download/v{1}/retekey-{1}.apk",
+                "retekey-0.2.0.apk", 713865, "0.2.0", 1790308592000L,
+                "9d63f8df6e8683241c781a68d2d88be095f9784e5171c002e46b303a9ffc5b16",
                 "9E:DF:10:F8:08:8E:6E:EE:CE:98:31:68:7F:DE:92:DC:B7:37:C7:74:F1:D3:9E:C3:7C:59:69:05:AE:02:0C:35",
                 "ReteKey"));
         return list;
+    }
+
+    /** GitHub's releases API lists every asset's full address; the release pages load them later. */
+    static String releasesIndex(String repo) {
+        return "https://api.github.com/repos/rubidus-api/" + repo + "/releases?per_page=20";
+    }
+
+    private static PresetItem rete(String name, String repo, String path, String file, long size,
+                                   String version, long time, String sha256, String signer, String author) {
+        PresetItem p = new PresetItem(name, RETE_RELEASES + path, file, size, version, time, sha256, signer, author);
+        p.index = releasesIndex(repo);
+        return p;
     }
 
     /**

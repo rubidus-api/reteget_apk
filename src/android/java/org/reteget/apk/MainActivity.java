@@ -30,8 +30,10 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import org.reteget.core.ApkSignatureVerifier;
 import org.reteget.core.ChecksumVerifier;
+import org.reteget.core.DownloadEngine;
 import org.reteget.core.DownloadQueue;
 import org.reteget.core.DownloadTask;
+import org.reteget.core.IndexMatcher;
 import org.reteget.core.PresetItem;
 import org.reteget.core.SettingsBundle;
 import org.reteget.core.TlsHelper;
@@ -62,6 +64,7 @@ public class MainActivity extends Activity {
     private Button btnClearChecksum;
     private CheckBox chkInsecureSsl;
     private CheckBox chkPureTls;
+    private CheckBox chkAutoUpgrade;
 
     private Button btnDownload;
     private Button btnCancel;
@@ -193,6 +196,14 @@ public class MainActivity extends Activity {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean("pref_pure_tls", isChecked).commit();
+            }
+        });
+        chkAutoUpgrade = (CheckBox) findViewById(R.id.chk_auto_upgrade);
+        chkAutoUpgrade.setChecked(spTls.getBoolean("pref_auto_upgrade", true));
+        chkAutoUpgrade.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean("pref_auto_upgrade", isChecked).commit();
             }
         });
 
@@ -366,6 +377,12 @@ public class MainActivity extends Activity {
             int urlStart = sb.length();
             sb.append(item.url);
             sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF0277BD), urlStart, sb.length(), 0);
+            if (item.hasIndex()) {
+                sb.append("  /  ").append(getString(R.string.preset_index_label)).append(' ');
+                int indexStart = sb.length();
+                sb.append(item.index.trim());
+                sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF2E7D32), indexStart, sb.length(), 0);
+            }
             String meta = item.getMetadataSummary();
             if (meta != null && meta.length() > 0) {
                 sb.append("  /  ").append(meta.replace("\n", " · "));
@@ -386,6 +403,17 @@ public class MainActivity extends Activity {
                     return true;
                 }
             });
+
+            if (item.hasIndex()) {
+                View latest = row.findViewById(R.id.btn_latest);
+                latest.setVisibility(View.VISIBLE);
+                latest.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        downloadLatest(item);
+                    }
+                });
+            }
 
             row.findViewById(R.id.btn_use).setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -475,6 +503,9 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Labels in a dialog: the app theme's text is dark, but the (pre-Holo) dialog frame is dark. */
+    private static final int DIALOG_LABEL = 0xFFCCCCCC;
+
     private void promptEditPresetDialog(final PresetItem item) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -483,6 +514,7 @@ public class MainActivity extends Activity {
 
         TextView lblName = new TextView(this);
         lblName.setText(R.string.dialog_edit_preset_name_label);
+        lblName.setTextColor(DIALOG_LABEL);
         layout.addView(lblName);
 
         final EditText inputName = new EditText(this);
@@ -492,6 +524,7 @@ public class MainActivity extends Activity {
 
         TextView lblUrl = new TextView(this);
         lblUrl.setText(R.string.dialog_edit_preset_url_label);
+        lblUrl.setTextColor(DIALOG_LABEL);
         lblUrl.setPadding(0, pad / 2, 0, 0);
         layout.addView(lblUrl);
 
@@ -499,6 +532,17 @@ public class MainActivity extends Activity {
         inputUrl.setHint(R.string.dialog_edit_preset_url_hint);
         inputUrl.setText(item.url != null ? item.url : "");
         layout.addView(inputUrl);
+
+        TextView lblIndex = new TextView(this);
+        lblIndex.setText(R.string.dialog_edit_preset_index_label);
+        lblIndex.setTextColor(DIALOG_LABEL);
+        lblIndex.setPadding(0, pad / 2, 0, 0);
+        layout.addView(lblIndex);
+
+        final EditText inputIndex = new EditText(this);
+        inputIndex.setHint(R.string.dialog_edit_preset_index_hint);
+        inputIndex.setText(item.index != null ? item.index : "");
+        layout.addView(inputIndex);
 
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_edit_preset_title)
@@ -511,6 +555,7 @@ public class MainActivity extends Activity {
                         if (!newUrl.isEmpty()) {
                             item.name = newName;
                             item.url = newUrl;
+                            item.index = inputIndex.getText().toString().trim();
                             savePresets();
                             renderPresets();
                             Toast.makeText(MainActivity.this, R.string.toast_preset_updated, Toast.LENGTH_SHORT).show();
@@ -651,6 +696,7 @@ public class MainActivity extends Activity {
             b.appVersion = "";
         }
         b.builtInTls = chkPureTls.isChecked();
+        b.autoUpgrade = chkAutoUpgrade.isChecked();
         b.presets.addAll(presetList);
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         for (Map.Entry<String, ?> e : sp.getAll().entrySet()) {
@@ -798,6 +844,9 @@ public class MainActivity extends Activity {
         renderPresets();
         if (b.builtInTls != null) {
             chkPureTls.setChecked(b.builtInTls);   // its listener stores the choice
+        }
+        if (b.autoUpgrade != null) {
+            chkAutoUpgrade.setChecked(b.autoUpgrade);
         }
         // Signing keys already recorded on this phone win: an imported file must not be able to
         // replace a key this phone has seen with another one.
@@ -1108,6 +1157,105 @@ public class MainActivity extends Activity {
         scrollView.smoothScrollTo(0, 0);
     }
 
+    /** Largest index page read; a release list or directory listing is far smaller. */
+    private static final long MAX_INDEX_BYTES = 1024 * 1024;
+
+    /**
+     * Latest: reads the preset's index page, takes the address that fits the preset URL and sorts
+     * last (Windows order), shows it in the URL bar and queues it. The download is recorded under
+     * the preset as with Use + Download.
+     */
+    private void downloadLatest(final PresetItem item) {
+        final String index = item.index.trim();
+        final File dir = new File(getCacheDir(), "index-" + System.currentTimeMillis());
+        dir.mkdirs();
+        Toast.makeText(this, getString(R.string.latest_looking, item.getDisplayName()), Toast.LENGTH_SHORT).show();
+        final DownloadEngine engine = new DownloadEngine();
+        engine.download(index, dir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(), new DownloadEngine.Listener() {
+            @Override
+            public void onStart(String filename, long totalBytes) {
+                if (totalBytes > MAX_INDEX_BYTES) engine.cancel();
+            }
+
+            @Override
+            public void onProgress(long bytesRead, long totalBytes, int percent, long bytesPerSec) {
+                if (bytesRead > MAX_INDEX_BYTES) engine.cancel();
+            }
+
+            @Override
+            public void onComplete(File file) {
+                final String page = readSmallFile(file);
+                deleteTree(dir);
+                final IndexMatcher.Match m = page == null ? null : IndexMatcher.latest(page, index, item.url);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (page == null) {
+                            finishLatest(item, index, null, "too large");
+                        } else {
+                            finishLatest(item, index, m, null);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final Exception ex) {
+                deleteTree(dir);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        finishLatest(item, index, null, ex.getMessage() != null ? ex.getMessage() : ex.toString());
+                    }
+                });
+            }
+
+            @Override
+            public void onCancel() {
+                deleteTree(dir);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        finishLatest(item, index, null, "larger than 1 MB");
+                    }
+                });
+            }
+        });
+    }
+
+    private void finishLatest(PresetItem item, String index, IndexMatcher.Match m, String error) {
+        if (isFinishing()) return;
+        if (error != null) {
+            Toast.makeText(this, getString(R.string.latest_failed, index, error), Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (m == null) {
+            Toast.makeText(this, getString(R.string.latest_none, index), Toast.LENGTH_LONG).show();
+            return;
+        }
+        // Same view as Use, with the version found: the URL bar then shows what is downloaded.
+        selectAndLoadPreset(item, false);
+        if (!new UrlTemplate(item.url).hasPlaceholders()) {
+            editUrl.setText(m.url);   // a pattern with only * is not a template
+        } else if (m.version != null) {
+            for (EditText input : variableInputs.values()) {
+                input.setText(m.version);
+            }
+        }
+        sQueue.enqueue(m.url, chooseDownloadDir(), chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
+                editExpectedChecksum.getText().toString().trim(), item.url, m.version);
+        Toast.makeText(this, getString(R.string.latest_found, m.url.substring(m.url.lastIndexOf('/') + 1)),
+                Toast.LENGTH_LONG).show();
+    }
+
+    private static void deleteTree(File f) {
+        File[] children = f.listFiles();
+        if (children != null) {
+            for (File c : children) deleteTree(c);
+        }
+        f.delete();
+    }
+
     // ------------------------------------------------------------------ download queue
 
     private void setupQueue() {
@@ -1267,7 +1415,7 @@ public class MainActivity extends Activity {
                 // Keep visible for manual install button review
             } else if (hasSignatureMismatch) {
                 promptSignatureMismatchDialog(destinationFile);
-            } else {
+            } else if (!startUpgrade(destinationFile)) {
                 promptAutoInstall(destinationFile);
             }
         } else {
@@ -1728,6 +1876,40 @@ public class MainActivity extends Activity {
         return null;
     }
 
+    /**
+     * An upgrade needs no question when the option is on, the file is signed with the same key as
+     * the installed app, its checksum raised no warning (checked by the caller), and its version
+     * is newer. Android 12+ may then install it with no screen at all (see SessionInstaller);
+     * otherwise the system installer opens straight away and needs one tap.
+     * Returns false when this is not such an upgrade.
+     */
+    private boolean startUpgrade(File apkFile) {
+        if (!chkAutoUpgrade.isChecked() || lastSignatureResult == null
+                || lastSignatureResult.status != ApkSignatureVerifier.Status.MATCH_INSTALLED) {
+            return false;
+        }
+        PackageInfo archive;
+        PackageInfo installed;
+        try {
+            PackageManager pm = getPackageManager();
+            archive = pm.getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+            if (archive == null) return false;
+            installed = pm.getPackageInfo(archive.packageName, 0);
+        } catch (Exception e) {
+            return false;
+        }
+        if (archive.versionCode <= installed.versionCode) return false;
+        String label = installed.applicationInfo != null
+                ? String.valueOf(installed.applicationInfo.loadLabel(getPackageManager())) : archive.packageName;
+        Toast.makeText(this, getString(R.string.upgrade_started, label,
+                archive.versionName != null ? archive.versionName : String.valueOf(archive.versionCode)),
+                Toast.LENGTH_SHORT).show();
+        if (!SessionInstaller.start(this, apkFile, archive.packageName, label, true)) {
+            launchViewInstaller(apkFile);
+        }
+        return true;
+    }
+
     private void promptAutoInstall(final File apkFile) {
         new AlertDialog.Builder(this)
                 .setTitle("Download Complete")
@@ -1742,7 +1924,26 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /** The system installer, with its confirmation screen; see SessionInstaller for why a session. */
     private void launchApkInstaller(File apkFile) {
+        String pkg = getPackageNameFromArchive(apkFile);
+        String label = pkg != null ? pkg : apkFile.getName();
+        try {
+            PackageInfo pi = getPackageManager().getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+            if (pi != null && pi.applicationInfo != null) {
+                pi.applicationInfo.sourceDir = apkFile.getAbsolutePath();
+                pi.applicationInfo.publicSourceDir = apkFile.getAbsolutePath();
+                label = String.valueOf(pi.applicationInfo.loadLabel(getPackageManager()));
+            }
+        } catch (Exception ignored) {
+        }
+        if (!SessionInstaller.start(this, apkFile, pkg, label, false)) {
+            launchViewInstaller(apkFile);
+        }
+    }
+
+    /** Android 4.4 and older, or when a session cannot start: ACTION_VIEW on the file. */
+    private void launchViewInstaller(File apkFile) {
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");

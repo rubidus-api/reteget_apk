@@ -22,10 +22,12 @@ import java.util.Map;
  * # reteget settings 1
  * [options]
  * built_in_tls = false
+ * auto_upgrade = true
  *
  * [preset-1]
  * name = "ReteGet"
  * url = "https://github.com/rubidus-api/reteget_apk/releases/download/v{1}/reteget-{1}.apk"
+ * index = "https://api.github.com/repos/rubidus-api/reteget_apk/releases?per_page=20"
  * version = "0.3.1"
  *
  * [signer-1]
@@ -48,6 +50,8 @@ public final class SettingsBundle {
     public String appVersion = "";
     /** Null when the file does not say. */
     public Boolean builtInTls;
+    /** Null when the file does not say. */
+    public Boolean autoUpgrade;
     public final List<PresetItem> presets = new ArrayList<PresetItem>();
     /** package name -> { sha256 fingerprint, author } */
     public final Map<String, String[]> signers = new LinkedHashMap<String, String[]>();
@@ -68,11 +72,15 @@ public final class SettingsBundle {
         if (builtInTls != null) {
             out.append("built_in_tls = ").append(builtInTls.booleanValue()).append('\n');
         }
+        if (autoUpgrade != null) {
+            out.append("auto_upgrade = ").append(autoUpgrade.booleanValue()).append('\n');
+        }
         for (int i = 0; i < presets.size(); i++) {
             PresetItem p = presets.get(i);
             out.append("\n[preset-").append(i + 1).append("]\n");
             text(out, "name", p.name);
             text(out, "url", p.url);
+            text(out, "index", p.index);
             text(out, "file", p.lastFileName);
             if (p.lastFileSize >= 0) out.append("size = ").append(p.lastFileSize).append('\n');
             text(out, "version", p.lastVersion);
@@ -177,12 +185,14 @@ public final class SettingsBundle {
                     record.put(key, value);
                 }
             } else if ("options".equals(section)) {
-                if ("built_in_tls".equals(key)) {
+                if ("built_in_tls".equals(key) || "auto_upgrade".equals(key)) {
                     Boolean v = bool(value);
                     if (v == null) {
-                        b.complaints.add("line " + (i + 1) + ": built_in_tls cannot be \"" + shorten(value) + "\"");
-                    } else {
+                        b.complaints.add("line " + (i + 1) + ": " + key + " cannot be \"" + shorten(value) + "\"");
+                    } else if ("built_in_tls".equals(key)) {
                         b.builtInTls = v;
+                    } else {
+                        b.autoUpgrade = v;
                     }
                 } else {
                     b.complaints.add("line " + (i + 1) + ": this version has no option called \"" + shorten(key) + "\"");
@@ -191,7 +201,7 @@ public final class SettingsBundle {
         }
         b.finishRecord(recordKind, record);
         if (!sawAnything || (!text.startsWith("# reteget") && b.presets.isEmpty() && b.signers.isEmpty()
-                && b.builtInTls == null)) {
+                && b.builtInTls == null && b.autoUpgrade == null)) {
             throw new IllegalArgumentException("not a ReteGet settings file");
         }
         return b;
@@ -208,6 +218,7 @@ public final class SettingsBundle {
             PresetItem p = new PresetItem(orEmpty(r.get("name")), url, r.get("file"),
                     number(r.get("size"), -1), r.get("version"), number(r.get("time"), 0),
                     r.get("sha256"), r.get("signer"), r.get("author"));
+            p.index = orEmpty(r.get("index")).trim();
             if (!presets.contains(p)) presets.add(p);
         } else {
             String pkg = r.get("package");
@@ -222,7 +233,7 @@ public final class SettingsBundle {
 
     private static boolean knownKey(String kind, String key) {
         String[] keys = "preset".equals(kind)
-                ? new String[] { "name", "url", "file", "size", "version", "time", "sha256", "signer", "author" }
+                ? new String[] { "name", "url", "index", "file", "size", "version", "time", "sha256", "signer", "author" }
                 : new String[] { "package", "sha256", "author" };
         for (String k : keys) {
             if (k.equals(key)) return true;

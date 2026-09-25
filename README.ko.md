@@ -1,6 +1,6 @@
 # ReteGet
 
-**ReteGet v0.3.5** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.3.5/reteget-0.3.5.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.3.5)
+**ReteGet v0.4.0** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.4.0/reteget-0.4.0.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.4.0)
 
 [English](README.md) · **한국어**
 
@@ -21,9 +21,11 @@ PC나 ADB 연결, 무거운 현대 앱 스토어 없이도 구형 기기에서 �
 <p align="center">
   <img src="docs/screenshots/screenshot_queue-0.3.1.png" alt="안드로이드 2.3의 ReteGet 다운로드 큐: 진행 중인 항목, 다시 시도할 수 있는 실패 항목, 완료 항목" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_template-0.3.1.png" alt="안드로이드 2.3의 ReteGet URL 템플릿, 버전 입력칸과 완성된 주소" width="220">
+  <img src="docs/screenshots/screenshot_template-0.4.0.png" alt="안드로이드 2.3의 ReteGet URL 템플릿, 버전 입력칸, 완성된 주소와 옵션" width="220">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/screenshot_presets-0.3.2.png" alt="안드로이드 2.3의 ReteGet 기본 rete 프리셋: 이름, 체크섬, 서명자" width="220">
+  <img src="docs/screenshots/screenshot_presets-0.4.0.png" alt="안드로이드 2.3의 ReteGet 기본 rete 프리셋: Latest, 찾아볼 페이지, 체크섬, 서명자" width="220">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/screenshot_edit-0.4.0.png" alt="안드로이드 2.3에서 ReteGet 프리셋 편집: 이름, 주소 패턴, 찾아볼 페이지" width="220">
 </p>
 
 ---
@@ -47,12 +49,13 @@ ReteGet은 외부 프레임워크 없는 순수 프레임워크 기반 안드로
 - **릴리즈 URL 템플릿 지원 (`{1}`, `{2}`, `{version}`)**: 다운로드 주소에 포함된 괄호형 플레이스홀더(예: `https://github.com/user/repo/releases/download/v{1}/app-{1}.apk`)를 자동으로 감지합니다. 템플릿이 인식되면 작은 입력창을 화면에 띄워, 긴 주소를 매번 다시 입력할 필요 없이 버전 번호만 넣으면 완성된 주소로 다운로드합니다.
 - **체크섬 및 무결성 해시 검증**: GitHub, GitLab 및 오픈소스 생태계에서 널리 쓰이는 **SHA-256**, **SHA-1**, **MD5**, **SHA-512** 해시 검증을 지원합니다. 순수 16진수 값, `sha256: <해시>`, 또는 리눅스 `sha256sum` 명령 출력 형식(`<해시>  <파일명>`)을 그대로 복사해서 붙여넣어도 자동으로 알고리즘을 감지하여 파일을 대조합니다. 일치 시 안전한 설치를 돕고, 불일치 시 설치 전 경고를 띄워 위변조 및 다운로드 손상을 방지하며, 계산된 해시값을 원터치로 복사할 수 있습니다.
 - **APK 서명 및 제작자 연속성 검증**: 다운로드된 APK의 X.509 서명 인증서를 추출하고 SHA-256 지문을 계산합니다. 기기에 이미 설치된 앱과의 서명 충돌(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`)을 사전 감지하고, 이전 다운로드 이력(TOFU 모델)과 대조하여 제작자 키 교체 여부를 경고합니다. 불일치 시 상세 내역과 함께 설치 취소 또는 무시하고 진행할 수 있는 선택형 경고 다이얼로그를 제공합니다.
-- **rete 시리즈 프리셋 기본 내장**: ReteGet, ReteClock, ReteKey(안드로이드 4.0+용, 그리고 안드로이드 9+용)가 GitHub 릴리즈용 버전 템플릿으로 들어 있고, 예상 SHA-256과 서명 키도 미리 채워져 있습니다. 기본 목록이 갱신되어도 직접 추가한 프리셋은 그대로 남습니다.
-- **프리셋 이름 지정 및 다운로드 이력 관리**: 프리셋마다 이름(예: *ReteGet*, *ReteClock*)을 붙여 템플릿 주소끼리 쉽게 구분합니다. *Download* 옆의 **Save**는 위 주소를 프리셋으로 남깁니다. 각 프리셋은 이름, 주소, 마지막 다운로드 기록을 한 문단으로 이어 보여 주고, 윗줄의 짧은 버튼으로 다룹니다: **Use**(또는 항목 누르기)는 알려진 버전을 채워 주소창으로 불러오고, **Edit**(또는 길게 누르기)는 이름과 주소를 바꾸고, **Up**/**Dn**은 순서를 바꾸고, **Del**은 지웁니다. **Select all**과 **Delete selected**는 체크한 프리셋에 작동합니다.
+- **rete 시리즈 프리셋 기본 내장**: ReteGet, ReteClock, ReteKey(안드로이드 4.0+용, 그리고 안드로이드 9+용)가 GitHub 릴리즈용 버전 템플릿으로 들어 있고, 예상 SHA-256과 서명 키도 미리 채워져 있으며, GitHub 릴리즈 목록이 찾아볼 페이지로 들어 있어 **Latest**로 각 앱의 가장 새 버전을 받습니다. 기본 목록이 갱신되어도 직접 추가한 프리셋은 그대로 남습니다.
+- **프리셋 이름 지정 및 다운로드 이력 관리**: 프리셋마다 이름(예: *ReteGet*, *ReteClock*)을 붙여 템플릿 주소끼리 쉽게 구분합니다. *Download* 옆의 **Save**는 위 주소를 프리셋으로 남깁니다. 각 프리셋은 이름, 주소, 마지막 다운로드 기록을 한 문단으로 이어 보여 주고, 윗줄의 짧은 버튼으로 다룹니다: **Use**(또는 항목 누르기)는 알려진 버전을 채워 주소창으로 불러오고, **Latest**(찾아볼 페이지가 있는 프리셋)는 그 페이지에서 찾은 가장 새 버전을 받고, **Edit**(또는 길게 누르기)는 이름·주소·찾아볼 페이지를 바꾸고, **Up**/**Dn**은 순서를 바꾸고, **Del**은 지웁니다. **Select all**과 **Delete selected**는 체크한 프리셋에 작동합니다.
+- **찾아볼 페이지에서 최신 받기**: 프리셋에는 주소와 별도로 찾아볼 페이지를 등록할 수 있습니다. 디렉터리 목록, 다운로드 페이지, 또는 GitHub 릴리즈 API 같은 JSON 목록입니다. **Latest**는 그 페이지를 읽어 프리셋 주소에 맞는 주소를 모두 모으고(`{1}`은 버전 자리: 숫자로 시작하는 숫자·영문자·점·밑줄이라 `app-{1}.apk`는 `app-1.0-legacy.apk`를 잡지 않습니다. `*`는 경로 한 칸 안의 아무 글자), 윈도 탐색기처럼 정렬해(숫자는 값으로 비교하므로 0.3.10이 0.3.9 뒤) 가장 뒤의 것을 큐에 넣습니다. 이 정렬에서는 `1.0-beta`가 `1.0` 뒤에 오므로, 그런 이름을 허용하는 패턴은 시험판을 고를 수 있습니다. GitHub 릴리즈 페이지는 다운로드 링크를 나중에 불러오므로, GitHub에는 링크가 들어 있는 `https://api.github.com/repos/<소유자>/<저장소>/releases`를 쓰세요.
 - **설정 내보내기·가져오기**: **Export**는 모든 설정(프리셋, 옵션, 앱별로 본 서명 키)을 다운로드 폴더의 `reteget-settings-<날짜>.ini`에 쓰고 같은 내용을 클립보드로 복사할 수도 있습니다. **Import**는 그런 파일이나 클립보드를 읽어 무엇이 바뀌는지 보여 준 뒤 병합합니다: 프리셋은 주소로 맞추고, 이 폰에만 있는 프리셋은 남고, 이 폰에 이미 기록된 서명 키는 절대 바뀌지 않습니다. 파일은 INI와 TOML이 똑같이 읽는 부분집합(rete 시리즈의 설정 형식)의 평문이라 사람이 읽고 고칠 수 있습니다.
 - **붙여넣기와 지우기**: *Target URL*과 *Expected Checksum* 옆의 **Paste**는 클립보드의 내용을 넣고 **Clear**는 칸을 비웁니다.
 - **기본 다운로드 폴더에 저장**: 파일은 시스템의 기본 다운로드 폴더에 저장됩니다(안드로이드 2.3에서는 `/mnt/sdcard/Download`. 여기서 "sdcard"는 카드 슬롯이 없는 폰에서도 쓰는 공용 저장소의 이름입니다). 공용 저장소가 없거나 사용 중이면(예: USB로 PC에 연결된 동안) 앱 전용 저장소에 대신 저장하고 알려 주며, 그곳에서도 APK를 설치할 수 있습니다.
-- **원터치 APK 설치 연동**: `.apk` 파일 다운로드가 끝나면 즉시 시스템 패키지 인스톨러(`Intent.ACTION_VIEW` - `application/vnd.android.package-archive`) 호출 다이얼로그를 띄워 한 번의 탭으로 설치 화면으로 진입합니다.
+- **APK 설치와 묻지 않는 업그레이드**: `.apk` 파일 다운로드가 끝나면 시스템 설치 프로그램으로 설치할지 묻습니다. 안드로이드 5 이상은 PackageInstaller 세션으로(이때 ReteGet이 그 앱의 설치자로 기록됩니다), 그보다 오래된 버전은 `ACTION_VIEW`로 설치합니다. 받은 파일이 **설치된 앱의 업그레이드**이고(설치본과 같은 서명 키, 더 새 버전, 체크섬 경고 없음) *서명 키가 같으면 설치된 앱을 묻지 않고 업그레이드*가 켜져 있으면(기본값) ReteGet은 묻지 않고 바로 업그레이드를 시작합니다. 안드로이드 12 이상에서는 ReteGet이 그 앱을 설치했고 새 버전이 최근 안드로이드 API를 대상으로 하면 시스템도 확인 화면 없이 설치합니다(ReteKey는 해당, ReteClock과 ReteGet은 API 28 대상이라 시스템이 한 번 묻습니다). 오래된 안드로이드는 늘 한 번 누르는 확인 화면이 뜨고, 새 앱은 절대 확인 없이 설치하지 않습니다.
 - **자체 서명 / 사설 SSL 우회 체크박스**: 홈랩이나 사내 테스트 서버의 자체 서명 인증서 환경을 위해 인증서 검증을 건너뛰는 옵션을 기본 제공합니다.
 - **초경량 단일 Dex**: 최종 APK 크기 약 173 KB, 외부 라이브러리 제로, 무거운 Gradle 없이 단일 덱스로 빌드됩니다.
 

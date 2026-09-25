@@ -7,9 +7,10 @@ Features
 * Download queue at the top of the screen: one download at a time, with the file name, state, URL and a progress bar for each entry. Failed downloads say why and can be retried; finished APKs can be installed from the list. Select all / Delete selected. The list survives closing the app.
 * URL templates: a URL such as .../download/v{1}/app-{1}.apk shows a small field for {1}, so an update is just a new version number.
 * Presets with names, including the rete series (ReteGet, ReteClock, ReteKey) with their expected checksums and signing keys filled in. Use, Edit, Up, Dn and Del on each preset.
+* Latest: a preset can name an index page (a directory listing, or GitHub's releases API); Latest downloads the newest file there that fits the preset URL, in Windows Explorer order (0.3.10 after 0.3.9). The rete presets come with it.
 * Checksum check: SHA-256, SHA-1, MD5 and SHA-512, pasted as a bare hash or a sha256sum line.
 * APK signing-key check: warns when an APK is signed by a different key than the installed app or the last download of it.
-* One tap to open the system installer after an APK download.
+* Installs APKs with the system installer, and upgrades an installed app without asking when the new file has the same signing key and a newer version (Android 12+ may skip its own confirmation too).
 * HTTP, HTTPS and passive FTP.
 * Settings export and import (presets, options, signing keys) as a plain text file in the subset of INI and TOML that both read the same way, or through the clipboard.
 * Saves to the system Download folder; when shared storage is unavailable, to the app's own storage, from where APKs can still be installed.

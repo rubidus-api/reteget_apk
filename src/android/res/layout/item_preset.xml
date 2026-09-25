@@ -28,7 +28,14 @@
             android:layout_height="1dp"
             android:layout_weight="1" />
 
-        <!-- Actions: short words in 40dp-high touch targets, no button chrome. -->
+        <!-- Actions: short words in 40dp-high touch targets, no button chrome. Latest shows only
+             for a preset with an index page. -->
+        <TextView
+            android:id="@+id/btn_latest"
+            style="@style/PresetAction"
+            android:text="@string/btn_latest"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/btn_use"
             style="@style/PresetAction"
