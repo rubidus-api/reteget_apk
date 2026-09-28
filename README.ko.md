@@ -1,8 +1,6 @@
+**한국어** | [English](README.md) — **ReteGet v0.4.1** — [APK(Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.4.1/reteget-0.4.1.apk)
+
 # ReteGet
-
-**ReteGet v0.4.1** (최신 릴리즈) 다운로드 — [apk (안드로이드 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.4.1/reteget-0.4.1.apk) · [릴리즈 노트](https://github.com/rubidus-api/reteget_apk/releases/tag/v0.4.1)
-
-[English](README.md) · **한국어**
 
 > **0.3.4에서 앱 식별자가 바뀌었습니다.** ReteGet은 이제 `com.reteget`입니다(이전 `org.reteget.apk`). ReteClock(`com.reteclock`), ReteKey(`com.retekey`)와 맞춘 것입니다. 안드로이드는 새 앱으로 보므로 0.3.3 이하는 이 버전으로 업데이트되지 않습니다: 옛 앱에서 설정을 내보내고, 0.3.4를 설치해 가져온 뒤, 옛 앱을 지우세요.
 
