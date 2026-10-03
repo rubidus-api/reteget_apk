@@ -33,6 +33,7 @@ import org.reteget.core.ChecksumVerifier;
 import org.reteget.core.DownloadEngine;
 import org.reteget.core.DownloadQueue;
 import org.reteget.core.DownloadTask;
+import org.reteget.core.HttpAuth;
 import org.reteget.core.IndexMatcher;
 import org.reteget.core.PresetItem;
 import org.reteget.core.SettingsBundle;
@@ -380,12 +381,12 @@ public class MainActivity extends Activity {
             sb.setSpan(new android.text.style.RelativeSizeSpan(1.15f), 0, name.length(), 0);
             sb.append("  /  ");
             int urlStart = sb.length();
-            sb.append(item.url);
+            sb.append(HttpAuth.mask(item.url));
             sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF0277BD), urlStart, sb.length(), 0);
             if (item.hasIndex()) {
                 sb.append("  /  ").append(getString(R.string.preset_index_label)).append(' ');
                 int indexStart = sb.length();
-                sb.append(item.index.trim());
+                sb.append(HttpAuth.mask(item.index.trim()));
                 sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF2E7D32), indexStart, sb.length(), 0);
             }
             String meta = item.getMetadataSummary();
@@ -574,7 +575,7 @@ public class MainActivity extends Activity {
     private void promptDeleteSinglePresetDialog(final PresetItem item, final int index) {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_delete_preset_title)
-                .setMessage(getString(R.string.dialog_delete_preset_msg, item.url))
+                .setMessage(getString(R.string.dialog_delete_preset_msg, HttpAuth.mask(item.url)))
                 .setPositiveButton(R.string.btn_delete, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
@@ -978,7 +979,7 @@ public class MainActivity extends Activity {
             values.put(entry.getKey(), entry.getValue().getText().toString());
         }
         String resolved = currentTemplate.resolve(values);
-        txtResolvedPreview.setText("Resolved URL:\n" + resolved);
+        txtResolvedPreview.setText("Resolved URL:\n" + HttpAuth.mask(resolved));
     }
 
     private String getFinalDownloadUrl() {
@@ -1210,7 +1211,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        finishLatest(item, index, null, ex.getMessage() != null ? ex.getMessage() : ex.toString());
+                        finishLatest(item, index, null, HttpAuth.mask(ex.getMessage() != null ? ex.getMessage() : ex.toString()));
                     }
                 });
             }
@@ -1231,11 +1232,11 @@ public class MainActivity extends Activity {
     private void finishLatest(PresetItem item, String index, IndexMatcher.Match m, String error) {
         if (isFinishing()) return;
         if (error != null) {
-            Toast.makeText(this, getString(R.string.latest_failed, index, error), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.latest_failed, HttpAuth.mask(index), error), Toast.LENGTH_LONG).show();
             return;
         }
         if (m == null) {
-            Toast.makeText(this, getString(R.string.latest_none, index), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.latest_none, HttpAuth.mask(index)), Toast.LENGTH_LONG).show();
             return;
         }
         // Same view as Use, with the version found: the URL bar then shows what is downloaded.
@@ -1506,7 +1507,7 @@ public class MainActivity extends Activity {
         sb.setSpan(new android.text.style.ForegroundColorSpan(colour), st, sb.length(), 0);
         sb.append("  /  ");
         int us = sb.length();
-        sb.append(t.url);
+        sb.append(HttpAuth.mask(t.url));
         sb.setSpan(new android.text.style.ForegroundColorSpan(0xFF0277BD), us, sb.length(), 0);
         sb.setSpan(new android.text.style.RelativeSizeSpan(0.9f), us, sb.length(), 0);
         return sb;
@@ -1635,22 +1636,33 @@ public class MainActivity extends Activity {
                     sb.append(" / ").append(formatBytes(t.bytesTotal)).append(" (").append(t.percent()).append("%)");
                 }
                 if (t.bytesPerSec > 0) sb.append(" · ").append(formatBytes(t.bytesPerSec)).append("/s");
+                appendRunNotes(sb, t);
                 break;
             case DONE:
                 sb.append(getString(R.string.queue_done)).append(" · ").append(formatBytes(t.bytesDone));
                 if (t.hasWarning(DownloadTask.WARN_CHECKSUM)) sb.append(" · ").append(getString(R.string.queue_warn_checksum));
                 if (t.hasWarning(DownloadTask.WARN_SIGNATURE)) sb.append(" · ").append(getString(R.string.queue_warn_signature));
                 if (t.hasWarning(DownloadTask.WARN_MISSING)) sb.append(" · ").append(getString(R.string.queue_file_missing));
+                appendRunNotes(sb, t);
                 break;
             case FAILED:
                 sb.append(getString(R.string.queue_failed)).append(": ").append(
                         DownloadQueue.INTERRUPTED.equals(t.error) ? getString(R.string.queue_interrupted) : t.error);
+                java.io.File part = t.partFile();
+                if (part != null) sb.append(" · ").append(getString(R.string.queue_part_kept, formatBytes(part.length())));
                 break;
             case CANCELLED:
                 sb.append(getString(R.string.queue_cancelled));
                 break;
         }
         return sb.toString();
+    }
+
+    /** What happened in the entry's latest run: continued, started over, password sent unencrypted. */
+    private void appendRunNotes(StringBuilder sb, DownloadTask t) {
+        if (t.resumedFrom > 0) sb.append(" · ").append(getString(R.string.queue_resumed, formatBytes(t.resumedFrom)));
+        if (t.hasNote(DownloadTask.NOTE_RESTARTED)) sb.append(" · ").append(getString(R.string.queue_restarted));
+        if (t.hasNote(DownloadTask.NOTE_CLEARTEXT_PASSWORD)) sb.append(" · ").append(getString(R.string.queue_cleartext_password));
     }
 
     private void setupInstallControl() {

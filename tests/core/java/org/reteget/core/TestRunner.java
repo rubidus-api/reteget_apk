@@ -53,6 +53,9 @@ public class TestRunner {
         testPureGcmEncryptionDecryption();
         testDownloadEngineSslErrorDetection();
 
+        HttpTests.run();
+        passed += HttpTests.passed;
+        failed += HttpTests.failed;
         org.reteget.core.tls.TlsTests.run();
         passed += org.reteget.core.tls.TlsTests.passed;
         failed += org.reteget.core.tls.TlsTests.failed;

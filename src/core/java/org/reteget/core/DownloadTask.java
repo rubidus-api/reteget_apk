@@ -1,5 +1,7 @@
 package org.reteget.core;
 
+import java.io.File;
+
 /**
  * One entry of the download queue: what to fetch, how, and what happened.
  * Fields are written by {@link DownloadQueue} under its lock; the UI reads snapshots.
@@ -38,6 +40,15 @@ public final class DownloadTask {
     public String error;
     public String tlsSummary;
     public long finishedAt;
+    /** The partial file of an unfinished HTTP download and what a resume needs (null when none). */
+    public String partPath;
+    public String validator;
+    /** In the latest run: the byte the download continued from (0 = it did not), and NOTE_* values joined by ','. */
+    public long resumedFrom;
+    public String note;
+
+    public static final String NOTE_RESTARTED = DownloadEngine.NOTICE_RESTARTED;
+    public static final String NOTE_CLEARTEXT_PASSWORD = DownloadEngine.NOTICE_CLEARTEXT_PASSWORD;
 
     public DownloadTask(long id, String url, String destDir, boolean insecure, boolean forceBuiltInTls,
                         String expectedChecksum, long createdAt) {
@@ -54,6 +65,21 @@ public final class DownloadTask {
         return warning != null && ("," + warning + ",").contains("," + kind + ",");
     }
 
+    public boolean hasNote(String kind) {
+        return note != null && ("," + note + ",").contains("," + kind + ",");
+    }
+
+    void addNote(String kind) {
+        if (!hasNote(kind)) note = note == null ? kind : note + "," + kind;
+    }
+
+    /** The partial file left by an earlier run, when there is one to continue from. */
+    public File partFile() {
+        if (partPath == null || validator == null) return null;
+        File f = new File(partPath);
+        return f.isFile() && f.length() > 0 ? f : null;
+    }
+
     public boolean isActive() {
         return state == State.QUEUED || state == State.RUNNING;
     }
@@ -68,11 +94,11 @@ public final class DownloadTask {
     /** Name to show: the file name once known, otherwise the last path segment of the URL. */
     public String displayName() {
         if (fileName != null && !fileName.isEmpty()) return fileName;
-        String u = url;
+        String u = HttpAuth.mask(url);
         int q = u.indexOf('?');
         if (q >= 0) u = u.substring(0, q);
         int slash = u.lastIndexOf('/');
-        return slash >= 0 && slash < u.length() - 1 ? u.substring(slash + 1) : url;
+        return slash >= 0 && slash < u.length() - 1 ? u.substring(slash + 1) : u;
     }
 
     DownloadTask copy() {
@@ -91,6 +117,10 @@ public final class DownloadTask {
         t.verified = verified;
         t.sha256 = sha256;
         t.warning = warning;
+        t.partPath = partPath;
+        t.validator = validator;
+        t.resumedFrom = resumedFrom;
+        t.note = note;
         return t;
     }
 
@@ -116,6 +146,10 @@ public final class DownloadTask {
         sb.append(",\"verified\":").append(verified ? 1 : 0);
         if (sha256 != null) sb.append(",\"sha\":").append(PresetItem.escapeJson(sha256));
         if (warning != null) sb.append(",\"warn\":").append(PresetItem.escapeJson(warning));
+        if (partPath != null) sb.append(",\"part\":").append(PresetItem.escapeJson(partPath));
+        if (validator != null) sb.append(",\"validator\":").append(PresetItem.escapeJson(validator));
+        if (resumedFrom > 0) sb.append(",\"resumed\":").append(resumedFrom);
+        if (note != null) sb.append(",\"note\":").append(PresetItem.escapeJson(note));
         return sb.append("}").toString();
     }
 
@@ -148,6 +182,10 @@ public final class DownloadTask {
         t.verified = PresetItem.extractJsonLong(json, "verified", 0) == 1;
         t.sha256 = PresetItem.extractJsonString(json, "sha");
         t.warning = PresetItem.extractJsonString(json, "warn");
+        t.partPath = PresetItem.extractJsonString(json, "part");
+        t.validator = PresetItem.extractJsonString(json, "validator");
+        t.resumedFrom = PresetItem.extractJsonLong(json, "resumed", 0);
+        t.note = PresetItem.extractJsonString(json, "note");
         return t;
     }
 }

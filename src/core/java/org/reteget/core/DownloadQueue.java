@@ -14,6 +14,9 @@ import java.util.List;
  * entry forgets the record and keeps the file. Entries that were QUEUED or RUNNING when the
  * app process died come back as FAILED ("interrupted") so they can be retried.
  *
+ * An unfinished HTTP download keeps its partial file ({@link DownloadTask#partPath}); Retry
+ * continues from it. Cancel and Remove delete it.
+ *
  * All methods are thread-safe. Listener callbacks run on the download thread or the caller's
  * thread; the UI must hop to its own thread.
  */
@@ -69,6 +72,8 @@ public final class DownloadQueue {
                 if (t.isActive()) {
                     t.state = DownloadTask.State.FAILED;
                     t.error = INTERRUPTED;
+                    java.io.File part = t.partFile();
+                    if (part != null) t.bytesDone = part.length();
                 }
                 tasks.add(t);
                 nextId = Math.max(nextId, t.id + 1);
@@ -85,7 +90,9 @@ public final class DownloadQueue {
                 return new Engine() {
                     @Override
                     public void start(DownloadTask t, DownloadEngine.Listener l) {
-                        e.download(t.url, new File(t.destDir), t.insecure, t.forceBuiltInTls, l);
+                        DownloadEngine.Resume r = t.partFile() != null
+                                ? new DownloadEngine.Resume(t.fileName, t.validator, t.bytesTotal) : null;
+                        e.download(t.url, new File(t.destDir), t.insecure, t.forceBuiltInTls, r, l);
                     }
 
                     @Override
@@ -140,19 +147,27 @@ public final class DownloadQueue {
         } else if (t.state == DownloadTask.State.QUEUED) {
             t.state = DownloadTask.State.CANCELLED;
             t.finishedAt = System.currentTimeMillis();
+            deletePart(t);
             persist();
             changed(t);
         }
     }
 
-    /** Queues a FAILED or CANCELLED entry again. */
+    /** Queues a FAILED or CANCELLED entry again; it continues from its partial file when there is one. */
     public synchronized void retry(long id) {
         DownloadTask t = find(id);
         if (t == null || (t.state != DownloadTask.State.FAILED && t.state != DownloadTask.State.CANCELLED)) return;
         t.state = DownloadTask.State.QUEUED;
         t.error = null;
-        t.bytesDone = 0;
-        t.bytesTotal = -1;
+        java.io.File part = t.partFile();
+        if (part != null) {
+            t.bytesDone = part.length(); // file name, validator and size stay for the resume
+        } else {
+            t.bytesDone = 0;
+            t.bytesTotal = -1;
+            t.partPath = null;
+            t.validator = null;
+        }
         t.bytesPerSec = 0;
         t.finishedAt = 0;
         t.verified = false;
@@ -173,15 +188,27 @@ public final class DownloadQueue {
             return;
         }
         tasks.remove(t);
+        deletePart(t);
         persist();
         changed(null);
+    }
+
+    /** Deletes an unfinished entry's partial file. */
+    private static void deletePart(DownloadTask t) {
+        if (t.state != DownloadTask.State.DONE && t.partPath != null) {
+            new File(t.partPath).delete();
+        }
+        t.partPath = null;
+        t.validator = null;
     }
 
     /** Removes every finished entry (done, failed, cancelled); returns how many. */
     public synchronized int clearFinished() {
         int n = 0;
         for (Iterator<DownloadTask> it = tasks.iterator(); it.hasNext();) {
-            if (!it.next().isActive()) {
+            DownloadTask t = it.next();
+            if (!t.isActive()) {
+                deletePart(t);
                 it.remove();
                 n++;
             }
@@ -231,11 +258,40 @@ public final class DownloadQueue {
         running = t;
         removeRunningWhenStopped = false;
         t.state = DownloadTask.State.RUNNING;
+        t.resumedFrom = 0;
+        t.note = null;
         persist();
         changed(t);
         final Engine engine = engines.create();
         runningEngine = engine;
-        engine.start(t.copy(), new DownloadEngine.Listener() {
+        engine.start(t.copy(), new DownloadEngine.ResumeListener() {
+            @Override
+            public void onPartial(String partPath, String validator, long totalBytes) {
+                synchronized (DownloadQueue.this) {
+                    if (running != t) return;
+                    t.partPath = partPath;
+                    t.validator = validator;
+                    t.bytesTotal = totalBytes;
+                    persist();
+                    changed(t);
+                }
+            }
+
+            @Override
+            public void onNotice(String notice, long value) {
+                synchronized (DownloadQueue.this) {
+                    if (running != t) return;
+                    if (DownloadEngine.NOTICE_RESUMED.equals(notice)) {
+                        t.resumedFrom = value;
+                    } else {
+                        if (DownloadEngine.NOTICE_RESTARTED.equals(notice)) t.resumedFrom = 0;
+                        t.addNote(notice);
+                    }
+                    persist();
+                    changed(t);
+                }
+            }
+
             @Override
             public void onStart(String filename, long totalBytes) {
                 synchronized (DownloadQueue.this) {
@@ -268,6 +324,8 @@ public final class DownloadQueue {
                     t.fileName = destinationFile.getName();
                     t.bytesDone = destinationFile.length();
                     t.bytesTotal = t.bytesDone;
+                    t.partPath = null;
+                    t.validator = null;
                     t.tlsSummary = engine.tlsSummary();
                     done = t.copy();
                     finish(t);
@@ -282,8 +340,12 @@ public final class DownloadQueue {
                 synchronized (DownloadQueue.this) {
                     if (running != t) return;
                     t.state = DownloadTask.State.FAILED;
-                    String m = ex.getMessage();
+                    String m = HttpAuth.mask(ex.getMessage());
                     t.error = m != null && !m.isEmpty() ? m : ex.getClass().getSimpleName();
+                    if (t.partFile() == null) {
+                        t.partPath = null; // the engine kept nothing to continue from
+                        t.validator = null;
+                    }
                     t.tlsSummary = engine.tlsSummary();
                     finish(t);
                 }
@@ -295,6 +357,8 @@ public final class DownloadQueue {
                 synchronized (DownloadQueue.this) {
                     if (running != t) return;
                     t.state = DownloadTask.State.CANCELLED;
+                    t.partPath = null; // the engine deleted it
+                    t.validator = null;
                     finish(t);
                 }
                 kick();

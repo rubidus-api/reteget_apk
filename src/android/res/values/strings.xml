@@ -86,6 +86,10 @@
     <string name="queue_connecting">Connecting…</string>
     <string name="queue_warn_checksum">checksum mismatch</string>
     <string name="queue_warn_signature">signing key differs</string>
+    <string name="queue_part_kept">%1$s kept, Retry continues from there</string>
+    <string name="queue_resumed">continued from %1$s</string>
+    <string name="queue_restarted">started over (the server could not continue)</string>
+    <string name="queue_cleartext_password">password sent unencrypted (http)</string>
     <string name="btn_paste">Paste</string>
     <string name="btn_clear_url">Clear</string>
     <string name="toast_clipboard_empty">The clipboard is empty</string>

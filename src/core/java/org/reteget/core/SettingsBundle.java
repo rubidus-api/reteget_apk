@@ -79,8 +79,9 @@ public final class SettingsBundle {
             PresetItem p = presets.get(i);
             out.append("\n[preset-").append(i + 1).append("]\n");
             text(out, "name", p.name);
-            text(out, "url", p.url);
-            text(out, "index", p.index);
+            // A password typed into a URL stays on this phone; the user name travels.
+            text(out, "url", HttpAuth.stripPasswords(p.url));
+            text(out, "index", HttpAuth.stripPasswords(p.index));
             text(out, "file", p.lastFileName);
             if (p.lastFileSize >= 0) out.append("size = ").append(p.lastFileSize).append('\n');
             text(out, "version", p.lastVersion);

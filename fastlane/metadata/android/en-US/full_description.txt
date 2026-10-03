@@ -12,6 +12,8 @@ Features
 * APK signing-key check: warns when an APK is signed by a different key than the installed app or the last download of it.
 * Installs APKs with the system installer; for an upgrade with the same signing key and a newer version it opens the installer right away, and you confirm there.
 * HTTP, HTTPS and passive FTP.
+* Broken HTTP downloads continue where they stopped (Range with If-Range): automatically up to three times, and with Retry, also after the app was closed.
+* Password-protected servers: http://user:password@host/path, answered with Digest (SHA-256, MD5) or Basic only when the server asks, and only to that address. Passwords are shown as *** and left out of settings exports.
 * Settings export and import (presets, options, signing keys) as a plain text file in the subset of INI and TOML that both read the same way, or through the clipboard.
 * Saves to the system Download folder; when shared storage is unavailable, to the app's own storage, from where APKs can still be installed.
 * Paste and Clear buttons for the URL and the checksum.
