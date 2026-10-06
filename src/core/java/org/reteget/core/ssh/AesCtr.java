@@ -12,10 +12,15 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class AesCtr {
 
+    /** Key stream is made this many blocks at a time: one cipher call instead of one per block. */
+    private static final int BATCH = 2048;
+
     private final Cipher aesEcb;
     private final byte[] counter = new byte[16];
-    private final byte[] stream = new byte[16];
-    private int used = 16;
+    private final byte[] counters = new byte[16 * BATCH];
+    private final byte[] stream = new byte[16 * BATCH];
+    private int used = 0;
+    private int filled = 0;
 
     public AesCtr(byte[] key, byte[] iv) throws Exception {
         if (key.length != 16 && key.length != 32) throw new IllegalArgumentException("AES key must be 16 or 32 bytes");
@@ -25,17 +30,35 @@ public final class AesCtr {
         System.arraycopy(iv, 0, counter, 0, 16);
     }
 
+    /** Makes key stream for at least {@code want} bytes (up to a full batch). */
+    private void refill(int want) throws Exception {
+        int blocks = Math.min(BATCH, (want + 15) / 16);
+        for (int b = 0; b < blocks; b++) {
+            System.arraycopy(counter, 0, counters, 16 * b, 16);
+            for (int k = 15; k >= 0; k--) {
+                if (++counter[k] != 0) break;
+            }
+        }
+        int n = aesEcb.update(counters, 0, 16 * blocks, stream, 0);
+        if (n != 16 * blocks) throw new IllegalStateException("AES block cipher returned " + n + " bytes");
+        used = 0;
+        filled = 16 * blocks;
+    }
+
     /** XORs the next {@code len} key-stream bytes into {@code in}, writing to {@code out}; may be in place. */
     public void process(byte[] in, int inOff, int len, byte[] out, int outOff) throws Exception {
-        for (int i = 0; i < len; i++) {
-            if (used == 16) {
-                aesEcb.update(counter, 0, 16, stream, 0);
-                for (int k = 15; k >= 0; k--) {
-                    if (++counter[k] != 0) break;
-                }
-                used = 0;
+        while (len > 0) {
+            if (used == filled) refill(len);
+            int n = Math.min(len, filled - used);
+            final byte[] ks = stream;
+            int u = used;
+            for (int i = 0; i < n; i++) {
+                out[outOff + i] = (byte) (in[inOff + i] ^ ks[u + i]);
             }
-            out[outOff + i] = (byte) (in[inOff + i] ^ stream[used++]);
+            used += n;
+            inOff += n;
+            outOff += n;
+            len -= n;
         }
     }
 }

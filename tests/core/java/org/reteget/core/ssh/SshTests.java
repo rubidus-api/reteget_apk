@@ -30,6 +30,7 @@ public final class SshTests {
         testEd25519AgainstJdk();
         testEd25519Rejections();
         testAesCtr();
+        testHmac();
         testWireTypes();
         testDhGroup();
         if (!jdkHasEd25519()) {
@@ -931,6 +932,43 @@ public final class SshTests {
         } catch (Exception e) {
             check("AES-CTR: " + e, false);
         }
+    }
+
+    private static void testHmac() {
+        try {
+            // RFC 4231 test cases 1, 2 and 6 (a key longer than the block)
+            checkEq("HMAC-SHA-256 RFC 4231 case 1", "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+                    hex(hmac(hex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"), "Hi There".getBytes())));
+            checkEq("HMAC-SHA-256 RFC 4231 case 2", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+                    hex(hmac("Jefe".getBytes(), "what do ya want for nothing?".getBytes())));
+            byte[] longKey = new byte[131];
+            Arrays.fill(longKey, (byte) 0xaa);
+            checkEq("HMAC-SHA-256 RFC 4231 case 6", "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
+                    hex(hmac(longKey, "Test Using Larger Than Block-Size Key - Hash Key First".getBytes())));
+            Random rnd = new Random(11);
+            byte[] key = new byte[32];
+            rnd.nextBytes(key);
+            HmacSha256 ours = new HmacSha256(key);
+            javax.crypto.Mac jdk = javax.crypto.Mac.getInstance("HmacSHA256");
+            jdk.init(new SecretKeySpec(key, "HmacSHA256"));
+            boolean same = true;
+            for (int i = 0; i < 5; i++) { // one instance, several messages, in pieces
+                byte[] m = new byte[i * 100 + 3];
+                rnd.nextBytes(m);
+                ours.update(m, 0, 2);
+                ours.update(m, 2, m.length - 2);
+                same &= Arrays.equals(jdk.doFinal(m), ours.doFinal());
+            }
+            check("HMAC-SHA-256: reused for several messages, equals the JDK's", same);
+        } catch (Exception e) {
+            check("HMAC: " + e, false);
+        }
+    }
+
+    private static byte[] hmac(byte[] key, byte[] data) {
+        HmacSha256 h = new HmacSha256(key);
+        h.update(data);
+        return h.doFinal();
     }
 
     // --- wire types ---

@@ -74,19 +74,18 @@ final class BcryptPbkdf {
             expand0(key);
         }
 
+        /** One block, with the round function written out: this loop is where key derivation spends its time. */
         private void encipher() {
-            int xl = l, xr = r;
-            xl ^= p[0];
+            final int[] p = this.p;
+            final int[] s = this.s;
+            int xl = l ^ p[0];
+            int xr = r;
             for (int i = 1; i <= 16; i += 2) {
-                xr ^= f(xl) ^ p[i];
-                xl ^= f(xr) ^ p[i + 1];
+                xr ^= (((s[xl >>> 24] + s[256 + ((xl >>> 16) & 0xff)]) ^ s[512 + ((xl >>> 8) & 0xff)]) + s[768 + (xl & 0xff)]) ^ p[i];
+                xl ^= (((s[xr >>> 24] + s[256 + ((xr >>> 16) & 0xff)]) ^ s[512 + ((xr >>> 8) & 0xff)]) + s[768 + (xr & 0xff)]) ^ p[i + 1];
             }
             l = xr ^ p[17];
             r = xl;
-        }
-
-        private int f(int x) {
-            return ((s[x >>> 24] + s[256 + ((x >>> 16) & 0xff)]) ^ s[512 + ((x >>> 8) & 0xff)]) + s[768 + (x & 0xff)];
         }
 
         /** Encrypts {@code blocks} 64-bit blocks held as pairs of words, in place. */

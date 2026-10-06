@@ -7,8 +7,6 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.util.LinkedList;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.reteget.core.tls.AesGcm;
 import org.reteget.core.tls.EcCurve;
 import org.reteget.core.tls.TlsRandom;
@@ -85,7 +83,7 @@ public final class SshTransport {
     /** Keys and counters of one direction. */
     private static final class Direction {
         AesCtr ctr;
-        Mac mac;
+        HmacSha256 mac;
         AesGcm gcm;
         byte[] gcmIv;
         long seq;
@@ -472,9 +470,7 @@ public final class SshTransport {
                 d.mac = null;
             } else {
                 d.ctr = new AesCtr(derive(k, h, keyLetter, keyLen), derive(k, h, ivLetter, 16));
-                Mac mac = Mac.getInstance("HmacSHA256");
-                mac.init(new SecretKeySpec(derive(k, h, macLetter, 32), "HmacSHA256"));
-                d.mac = mac;
+                d.mac = new HmacSha256(derive(k, h, macLetter, 32));
                 d.gcm = null;
                 d.gcmIv = null;
             }
@@ -587,7 +583,8 @@ public final class SshTransport {
                 byte[] seq = new byte[4];
                 putU32(seq, 0, d.seq);
                 d.mac.update(seq);
-                byte[] mac = d.mac.doFinal(p);
+                d.mac.update(p);
+                byte[] mac = d.mac.doFinal();
                 d.ctr.process(p, 0, p.length, p, 0);
                 out.write(p);
                 out.write(mac);
@@ -637,7 +634,8 @@ public final class SshTransport {
                 byte[] seq = new byte[4];
                 putU32(seq, 0, d.seq);
                 d.mac.update(seq);
-                if (!MessageDigest.isEqual(d.mac.doFinal(whole), mac)) {
+                d.mac.update(whole);
+                if (!MessageDigest.isEqual(d.mac.doFinal(), mac)) {
                     throw new SshException("corrupt SSH packet (authentication failed)");
                 }
                 p = new byte[(int) len];
