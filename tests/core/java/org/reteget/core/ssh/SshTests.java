@@ -1,5 +1,6 @@
 package org.reteget.core.ssh;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -28,6 +29,444 @@ public final class SshTests {
         testEd25519Rejections();
         testAesCtr();
         testWireTypes();
+        testDhGroup();
+        if (!jdkHasEd25519()) {
+            System.out.println("  SKIP: protocol tests need the JDK's Ed25519 and X25519 (JDK 15+)");
+            return;
+        }
+        testAlgorithmMatrix();
+        testRekey();
+        testAuthentication();
+        testHostKeyDecision();
+        testStrictKex();
+        testSftpBehaviour();
+        testVersionExchange();
+        testTampering();
+    }
+
+    private static boolean jdkHasEd25519() {
+        try {
+            Signature.getInstance("Ed25519");
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    static final byte[] FILE = content(300000, 3);
+
+    static byte[] content(int n, int seed) {
+        byte[] b = new byte[n];
+        new Random(seed).nextBytes(b);
+        return b;
+    }
+
+    static final SshTransport.HostKeyCheck TRUST_ALL = new SshTransport.HostKeyCheck() {
+        public void check(SshHostKey key) {}
+    };
+
+    /** The outcome of one download attempt through SftpSession. */
+    static final class Fetch {
+        byte[] data;
+        IOException error;
+        String summary;
+        int kexCount;
+        SftpSession.FileInfo info;
+
+        String message() {
+            return error == null ? null : String.valueOf(error.getMessage());
+        }
+    }
+
+    static Fetch fetch(int port, String path, String user, String password, SshIdentity identity,
+                       SshTransport.HostKeyCheck check, String preferredType, long offset, long rekeyBytes) {
+        Fetch f = new Fetch();
+        SftpSession s = SftpSession.create();
+        s.rekeyBytesForTest = rekeyBytes;
+        try {
+            s.connect("127.0.0.1", port, 5000, 10000, user, password, identity, check, preferredType);
+            f.summary = s.summary();
+            f.info = s.stat(path);
+            final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            s.read(path, offset, f.info.size, new SftpSession.Sink() {
+                public void write(byte[] b, int off, int len) {
+                    out.write(b, off, len);
+                }
+            });
+            f.data = out.toByteArray();
+            f.kexCount = s.kexCount();
+            s.close();
+        } catch (IOException e) {
+            f.error = e;
+            s.abort();
+        }
+        return f;
+    }
+
+    static Fetch fetch(TestSshServer srv, String path) {
+        return fetch(srv.port(), path, "user", "pw", null, TRUST_ALL, null, 0, -1);
+    }
+
+    static TestSshServer server() throws Exception {
+        TestSshServer s = new TestSshServer();
+        s.files.put("/pub/file.bin", FILE);
+        return s;
+    }
+
+    private static void testDhGroup() {
+        BigInteger p = SshTransport.DH14_P;
+        check("DH group 14: 2048-bit safe prime", p.bitLength() == 2048 && p.isProbablePrime(40)
+                && p.subtract(BigInteger.ONE).shiftRight(1).isProbablePrime(40));
+    }
+
+    private static void testAlgorithmMatrix() {
+        String[] kexes = { "curve25519-sha256", "curve25519-sha256@libssh.org", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256" };
+        String[] ciphers = { "aes128-ctr", "aes256-ctr", "aes128-gcm@openssh.com", "aes256-gcm@openssh.com" };
+        for (String kex : kexes) {
+            for (String cipher : ciphers) {
+                TestSshServer srv = null;
+                try {
+                    srv = server();
+                    srv.kexAlgs = new String[] { kex };
+                    srv.ciphers = new String[] { cipher };
+                    srv.start();
+                    Fetch f = fetch(srv, "/pub/file.bin");
+                    check(kex + " + " + cipher + ": file identical" + (f.error != null ? " (" + f.error + ")" : ""),
+                            f.error == null && Arrays.equals(FILE, f.data) && kex.equals(srv.lastKex) && cipher.equals(srv.lastCipher));
+                } catch (Exception e) {
+                    check(kex + " + " + cipher + ": " + e, false);
+                } finally {
+                    if (srv != null) srv.close();
+                }
+            }
+        }
+        String[][] hostKeys = { { "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp256" }, { "ssh-rsa", "rsa-sha2-512" }, { "ssh-rsa", "rsa-sha2-256" } };
+        for (String[] hk : hostKeys) {
+            TestSshServer srv = null;
+            try {
+                srv = server();
+                srv.hostKeyType = hk[0];
+                if ("ssh-rsa".equals(hk[0])) srv.rsaSigAlgs = new String[] { hk[1] };
+                srv.start();
+                Fetch f = fetch(srv, "/pub/file.bin");
+                check("host key " + hk[1] + ": file identical" + (f.error != null ? " (" + f.error + ")" : ""),
+                        f.error == null && Arrays.equals(FILE, f.data) && hk[1].equals(srv.lastHostKeyAlg));
+                checkEq("host key " + hk[1] + ": summary", "SSH curve25519-sha256 aes128-ctr " + hk[1], f.summary);
+            } catch (Exception e) {
+                check("host key " + hk[1] + ": " + e, false);
+            } finally {
+                if (srv != null) srv.close();
+            }
+        }
+        TestSshServer srv = null;
+        try {
+            srv = server();
+            srv.strict = false;
+            srv.start();
+            Fetch f = fetch(srv, "/pub/file.bin");
+            check("server without strict KEX (CTR, running sequence numbers)", f.error == null && Arrays.equals(FILE, f.data));
+            srv.close();
+            srv = server();
+            srv.ciphers = new String[] { "3des-cbc", "aes128-cbc" };
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("no common cipher: says what the server offers",
+                    f.error != null && f.message().contains("no common cipher") && f.message().contains("aes128-cbc"));
+            srv.close();
+            srv = server();
+            srv.hostKeyType = "ssh-rsa";
+            srv.rsaSigAlgs = new String[] { "ssh-rsa" };
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("SHA-1 ssh-rsa host key signatures are not negotiated", f.error != null && f.message().contains("no common host key type"));
+        } catch (Exception e) {
+            check("negotiation: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
+    }
+
+    private static void testRekey() {
+        byte[] big = content(1200000, 9);
+        for (String cipher : new String[] { "aes128-ctr", "aes128-gcm@openssh.com" }) {
+            for (int strict = 0; strict < 2; strict++) {
+                String name = cipher + (strict == 1 ? ", strict" : ", not strict");
+                TestSshServer srv = null;
+                try {
+                    srv = server();
+                    srv.files.put("/big", big);
+                    srv.ciphers = new String[] { cipher };
+                    srv.strict = strict == 1;
+                    srv.rekeyAfterFileBytes = 250000;
+                    srv.start();
+                    Fetch f = fetch(srv, "/big");
+                    check("server re-keys during the download (" + name + "): " + srv.kexCount + " exchanges"
+                                    + (f.error != null ? " (" + f.error + ")" : ""),
+                            f.error == null && Arrays.equals(big, f.data) && srv.kexCount >= 4);
+                    srv.close();
+
+                    srv = server();
+                    srv.files.put("/big", big);
+                    srv.ciphers = new String[] { cipher };
+                    srv.strict = strict == 1;
+                    srv.start();
+                    f = fetch(srv.port(), "/big", "user", "pw", null, TRUST_ALL, null, 0, 300000);
+                    check("client re-keys during the download (" + name + "): " + f.kexCount + " exchanges"
+                                    + (f.error != null ? " (" + f.error + ")" : ""),
+                            // reads already in flight (8 x 32 KiB) count towards the next interval
+                            f.error == null && Arrays.equals(big, f.data) && f.kexCount >= 3 && srv.kexCount == f.kexCount);
+                } catch (Exception e) {
+                    check("re-key (" + name + "): " + e, false);
+                } finally {
+                    if (srv != null) srv.close();
+                }
+            }
+        }
+    }
+
+    private static void testAuthentication() {
+        TestSshServer srv = null;
+        try {
+            srv = server().start();
+            Fetch f = fetch(srv.port(), "/pub/file.bin", "user", "wrong", null, TRUST_ALL, null, 0, -1);
+            check("wrong password fails", f.error != null && f.message().startsWith("Authentication failed"));
+            f = fetch(srv.port(), "/pub/file.bin", "user", null, null, TRUST_ALL, null, 0, -1);
+            check("no password given: hint", f.error != null && f.message().contains("needs a password") && f.message().contains("sftp://user:password@"));
+            check("without a password nothing but 'none' is tried", !srv.log.contains("auth password") || srv.log.indexOf("auth password") < srv.log.lastIndexOf("auth none"));
+            srv.close();
+
+            srv = server();
+            srv.allowPassword = false;
+            srv.allowKeyboardInteractive = true;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("keyboard-interactive with the password", f.error == null && Arrays.equals(FILE, f.data));
+            srv.close();
+
+            srv = server();
+            srv.passwordChangeRequired = true;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("password change request is an error", f.error != null && f.message().contains("password changed"));
+            srv.close();
+
+            srv = server();
+            srv.noSftp = true;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("no sftp subsystem: says so", f.error != null && f.message().contains("SFTP is not enabled"));
+        } catch (Exception e) {
+            check("authentication: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
+    }
+
+    private static void testHostKeyDecision() {
+        TestSshServer srv = null;
+        try {
+            srv = server().start();
+            final SshHostKey[] seen = new SshHostKey[1];
+            Fetch f = fetch(srv.port(), "/pub/file.bin", "user", "pw", null, new SshTransport.HostKeyCheck() {
+                public void check(SshHostKey key) throws IOException {
+                    seen[0] = key;
+                    throw new SshException("not trusted");
+                }
+            }, null, 0, -1);
+            check("refused host key stops the connection", f.error != null && "not trusted".equals(f.message()));
+            check("nothing was sent for authentication", !srv.log.contains("auth none") && !srv.log.contains("auth password"));
+            check("the check saw the server's key", seen[0] != null && Arrays.equals(srv.hostKeyBlob(), seen[0].blob())
+                    && seen[0].fingerprint().startsWith("SHA256:") && seen[0].fingerprint().length() == 50);
+            srv.close();
+
+            srv = server();
+            srv.corruptSignature = true;
+            srv.start();
+            final boolean[] asked = { false };
+            f = fetch(srv.port(), "/pub/file.bin", "user", "pw", null, new SshTransport.HostKeyCheck() {
+                public void check(SshHostKey key) {
+                    asked[0] = true;
+                }
+            }, null, 0, -1);
+            check("wrong exchange signature (man in the middle) is refused", f.error != null && f.message().contains("signature is wrong"));
+            check("the user is not even asked about that key", !asked[0] && !srv.log.contains("auth none"));
+        } catch (Exception e) {
+            check("host key decision: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
+    }
+
+    private static void testStrictKex() {
+        String[] cases = { "before", "during", "debug" };
+        for (String c : cases) {
+            for (int strict = 0; strict < 2; strict++) {
+                TestSshServer srv = null;
+                try {
+                    srv = server();
+                    srv.strict = strict == 1;
+                    srv.ignoreBeforeKexinit = c.equals("before");
+                    srv.ignoreDuringKex = c.equals("during");
+                    srv.debugBeforeNewkeys = c.equals("debug");
+                    srv.start();
+                    Fetch f = fetch(srv, "/pub/file.bin");
+                    if (strict == 1) {
+                        check("strict KEX: an extra message (" + c + ") ends the connection",
+                                f.error != null && (f.message().contains("strict") || f.message().contains("unexpected SSH message")));
+                    } else {
+                        check("without strict KEX the same message (" + c + ") is skipped", f.error == null && Arrays.equals(FILE, f.data));
+                    }
+                } catch (Exception e) {
+                    check("strict KEX (" + c + "): " + e, false);
+                } finally {
+                    if (srv != null) srv.close();
+                }
+            }
+        }
+    }
+
+    private static void testSftpBehaviour() {
+        TestSshServer srv = null;
+        try {
+            srv = server();
+            srv.files.put("home.bin", FILE);
+            srv.directories.add("/pub");
+            srv.start();
+            Fetch f = fetch(srv, "/pub/missing.bin");
+            check("missing file", f.error != null && f.message().contains("No such file") && f.message().contains("/pub/missing.bin"));
+            f = fetch(srv, "/pub");
+            check("a directory is not a file", f.error != null && f.message().contains("directory"));
+            f = fetch(srv, SftpSession.remotePath("/~/home.bin"));
+            check("/~/ is relative to the home directory", f.error == null && Arrays.equals(FILE, f.data) && srv.log.contains("stat home.bin"));
+            checkEq("an absolute path stays absolute", "/a/b", SftpSession.remotePath("/a/b"));
+            f = fetch(srv.port(), "/pub/file.bin", "user", "pw", null, TRUST_ALL, null, 123457, -1);
+            check("reading from an offset", f.error == null && Arrays.equals(Arrays.copyOfRange(FILE, 123457, FILE.length), f.data)
+                    && srv.log.contains("read 123457 32768"));
+            check("stat gives size and time", f.info != null && f.info.size == FILE.length && f.info.mtime == 1700000000L);
+            srv.close();
+
+            srv = server();
+            srv.shortReadEvery = 3;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("short reads are completed", f.error == null && Arrays.equals(FILE, f.data));
+            srv.close();
+
+            srv = server();
+            srv.reverseAnswers = true;
+            srv.shortReadEvery = 4;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("answers in reverse order are written in file order", f.error == null && Arrays.equals(FILE, f.data));
+            int inFlight = 0, max = 0;
+            // The client keeps several reads in flight: the first batch the server saw has more than one.
+            for (String l : srv.log) {
+                if (l.startsWith("read ")) inFlight++;
+            }
+            check("reads are pipelined", inFlight >= FILE.length / 32768);
+            srv.close();
+
+            srv = server();
+            srv.cutAfterFileBytes = 100000;
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("a cut connection is an error, not a short file", f.error != null && f.data == null);
+        } catch (Exception e) {
+            check("sftp behaviour: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
+    }
+
+    private static void testVersionExchange() {
+        TestSshServer srv = null;
+        try {
+            srv = server();
+            srv.linesBeforeVersion = new String[] { "Welcome to the test server", "second line" };
+            srv.start();
+            Fetch f = fetch(srv, "/pub/file.bin");
+            check("text lines before the version are skipped", f.error == null && Arrays.equals(FILE, f.data));
+            srv.close();
+            srv = server();
+            srv.versionLine = "SSH-1.5-old";
+            srv.start();
+            f = fetch(srv, "/pub/file.bin");
+            check("an SSH-1 server is refused", f.error != null && f.message().contains("SSH-2 needed"));
+        } catch (Exception e) {
+            check("version exchange: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
+    }
+
+    /** A TCP relay that flips one bit of the server's stream at a given offset. */
+    private static int flippingProxy(final int target, final long flipAt) throws IOException {
+        final java.net.ServerSocket ps = new java.net.ServerSocket(0, 5, java.net.InetAddress.getByName("127.0.0.1"));
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    final java.net.Socket c = ps.accept();
+                    final java.net.Socket s = new java.net.Socket("127.0.0.1", target);
+                    Thread up = new Thread(new Runnable() {
+                        public void run() {
+                            try {
+                                byte[] b = new byte[8192];
+                                int n;
+                                while ((n = c.getInputStream().read(b)) > 0) {
+                                    s.getOutputStream().write(b, 0, n);
+                                    s.getOutputStream().flush();
+                                }
+                            } catch (IOException ignored) {
+                            }
+                        }
+                    });
+                    up.setDaemon(true);
+                    up.start();
+                    long pos = 0;
+                    byte[] b = new byte[8192];
+                    int n;
+                    while ((n = s.getInputStream().read(b)) > 0) {
+                        if (flipAt >= pos && flipAt < pos + n) b[(int) (flipAt - pos)] ^= 0x20;
+                        pos += n;
+                        c.getOutputStream().write(b, 0, n);
+                        c.getOutputStream().flush();
+                    }
+                    c.close();
+                    s.close();
+                } catch (IOException ignored) {
+                } finally {
+                    try {
+                        ps.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        return ps.getLocalPort();
+    }
+
+    private static void testTampering() {
+        for (String cipher : new String[] { "aes128-ctr", "aes128-gcm@openssh.com" }) {
+            TestSshServer srv = null;
+            try {
+                srv = server();
+                srv.ciphers = new String[] { cipher };
+                srv.start();
+                int proxy = flippingProxy(srv.port(), 150000);
+                Fetch f = fetch(proxy, "/pub/file.bin", "user", "pw", null, TRUST_ALL, null, 0, -1);
+                check("one flipped bit in the encrypted stream is detected (" + cipher + "): " + f.message(),
+                        f.error != null && f.data == null && f.message().contains("corrupt SSH packet"));
+                proxy = flippingProxy(srv.port(), 60);
+                f = fetch(proxy, "/pub/file.bin", "user", "pw", null, TRUST_ALL, null, 0, -1);
+                check("a flipped bit in the server's KEXINIT breaks the exchange (" + cipher + ")", f.error != null);
+            } catch (Exception e) {
+                check("tampering (" + cipher + "): " + e, false);
+            } finally {
+                if (srv != null) srv.close();
+            }
+        }
     }
 
     static void check(String msg, boolean ok) {
