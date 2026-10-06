@@ -423,7 +423,7 @@ public final class HttpTests {
         }
     }
 
-    private static File tempDir() {
+    static File tempDir() {
         try {
             File f = File.createTempFile("httptests", "");
             f.delete();
@@ -434,7 +434,7 @@ public final class HttpTests {
         }
     }
 
-    private static byte[] read(File f) {
+    static byte[] read(File f) {
         try {
             InputStream in = new FileInputStream(f);
             try {
@@ -451,13 +451,13 @@ public final class HttpTests {
         }
     }
 
-    private static DownloadEngine engine(long... backoff) {
+    static DownloadEngine engine(long... backoff) {
         DownloadEngine e = new DownloadEngine();
         e.backoffMs = backoff;
         return e;
     }
 
-    private static boolean noPartLeft(File dir) {
+    static boolean noPartLeft(File dir) {
         String[] names = dir.list();
         if (names == null) return true;
         for (String n : names) {

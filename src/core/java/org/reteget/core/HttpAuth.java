@@ -55,7 +55,11 @@ public final class HttpAuth {
 
     /** The credentials in {@code url}'s user info, percent-decoded, or null when there are none. */
     public static Credentials credentials(URL url) {
-        String info = url.getUserInfo();
+        return credentials(url.getUserInfo());
+    }
+
+    /** The credentials in a raw (still percent-encoded) user info, or null when it is empty. */
+    public static Credentials credentials(String info) {
         if (info == null || info.length() == 0) return null;
         int colon = info.indexOf(':');
         String user = colon >= 0 ? info.substring(0, colon) : info;
@@ -82,7 +86,7 @@ public final class HttpAuth {
     }
 
     /** %XX sequences decoded as UTF-8; '+' stays '+' (unlike URLDecoder). */
-    static String percentDecode(String s) {
+    public static String percentDecode(String s) {
         if (s.indexOf('%') < 0) return s;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {

@@ -92,7 +92,7 @@ public final class DownloadQueue {
                     public void start(DownloadTask t, DownloadEngine.Listener l) {
                         DownloadEngine.Resume r = t.partFile() != null
                                 ? new DownloadEngine.Resume(t.fileName, t.validator, t.bytesTotal) : null;
-                        e.download(t.url, new File(t.destDir), t.insecure, t.forceBuiltInTls, r, l);
+                        e.download(t.url, new File(t.destDir), t.insecure, t.forceBuiltInTls, r, t.sshKey, l);
                     }
 
                     @Override
@@ -127,10 +127,17 @@ public final class DownloadQueue {
 
     public synchronized DownloadTask enqueue(String url, File destDir, boolean insecure, boolean forceBuiltInTls,
                                              String expectedChecksum, String template, String version) {
+        return enqueue(url, destDir, insecure, forceBuiltInTls, expectedChecksum, template, version, null);
+    }
+
+    /** As above; {@code sshKey} is the fingerprint of the key to use for an sftp:// URL, or null. */
+    public synchronized DownloadTask enqueue(String url, File destDir, boolean insecure, boolean forceBuiltInTls,
+                                             String expectedChecksum, String template, String version, String sshKey) {
         DownloadTask t = new DownloadTask(nextId++, url, destDir.getAbsolutePath(), insecure, forceBuiltInTls,
                 expectedChecksum, System.currentTimeMillis());
         t.template = template;
         t.version = version;
+        t.sshKey = sshKey == null || sshKey.length() == 0 ? null : sshKey;
         tasks.add(t);
         persist();
         changed(t);
@@ -159,6 +166,7 @@ public final class DownloadQueue {
         if (t == null || (t.state != DownloadTask.State.FAILED && t.state != DownloadTask.State.CANCELLED)) return;
         t.state = DownloadTask.State.QUEUED;
         t.error = null;
+        t.ask = null;
         java.io.File part = t.partFile();
         if (part != null) {
             t.bytesDone = part.length(); // file name, validator and size stay for the resume
@@ -342,6 +350,8 @@ public final class DownloadQueue {
                     t.state = DownloadTask.State.FAILED;
                     String m = HttpAuth.mask(ex.getMessage());
                     t.error = m != null && !m.isEmpty() ? m : ex.getClass().getSimpleName();
+                    t.ask = ex instanceof org.reteget.core.ssh.SshPromptException
+                            ? ((org.reteget.core.ssh.SshPromptException) ex).token() : null;
                     if (t.partFile() == null) {
                         t.partPath = null; // the engine kept nothing to continue from
                         t.validator = null;

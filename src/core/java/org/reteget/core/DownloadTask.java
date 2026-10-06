@@ -46,6 +46,13 @@ public final class DownloadTask {
     /** In the latest run: the byte the download continued from (0 = it did not), and NOTE_* values joined by ','. */
     public long resumedFrom;
     public String note;
+    /** sftp://: the fingerprint of the user's key to log in with (null: password only). */
+    public String sshKey;
+    /**
+     * Set on a FAILED entry that waits for the user: the token of an
+     * {@link org.reteget.core.ssh.SshPromptException} (confirm a host key, give a passphrase).
+     */
+    public String ask;
 
     public static final String NOTE_RESTARTED = DownloadEngine.NOTICE_RESTARTED;
     public static final String NOTE_CLEARTEXT_PASSWORD = DownloadEngine.NOTICE_CLEARTEXT_PASSWORD;
@@ -121,6 +128,8 @@ public final class DownloadTask {
         t.validator = validator;
         t.resumedFrom = resumedFrom;
         t.note = note;
+        t.sshKey = sshKey;
+        t.ask = ask;
         return t;
     }
 
@@ -150,6 +159,8 @@ public final class DownloadTask {
         if (validator != null) sb.append(",\"validator\":").append(PresetItem.escapeJson(validator));
         if (resumedFrom > 0) sb.append(",\"resumed\":").append(resumedFrom);
         if (note != null) sb.append(",\"note\":").append(PresetItem.escapeJson(note));
+        if (sshKey != null) sb.append(",\"sshkey\":").append(PresetItem.escapeJson(sshKey));
+        if (ask != null) sb.append(",\"ask\":").append(PresetItem.escapeJson(ask));
         return sb.append("}").toString();
     }
 
@@ -186,6 +197,8 @@ public final class DownloadTask {
         t.validator = PresetItem.extractJsonString(json, "validator");
         t.resumedFrom = PresetItem.extractJsonLong(json, "resumed", 0);
         t.note = PresetItem.extractJsonString(json, "note");
+        t.sshKey = PresetItem.extractJsonString(json, "sshkey");
+        t.ask = PresetItem.extractJsonString(json, "ask");
         return t;
     }
 }

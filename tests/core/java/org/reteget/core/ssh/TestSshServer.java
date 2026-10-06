@@ -48,58 +48,58 @@ import javax.crypto.spec.SecretKeySpec;
  * so it is an implementation independent of the client under test, as the JDK TLS server is for
  * the TLS tests. Needs JDK 15 or newer. The fields configure what it offers and how it misbehaves.
  */
-final class TestSshServer implements Runnable {
+public final class TestSshServer implements Runnable {
 
     // --- configuration ---
-    String[] kexAlgs = { "curve25519-sha256", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256" };
-    String hostKeyType = "ssh-ed25519"; // or ecdsa-sha2-nistp256, ssh-rsa
-    String[] rsaSigAlgs = { "rsa-sha2-512", "rsa-sha2-256" };
-    String[] ciphers = { "aes128-ctr", "aes256-ctr", "aes128-gcm@openssh.com", "aes256-gcm@openssh.com" };
-    String[] macs = { "hmac-sha2-256" };
-    boolean strict = true;
-    boolean ignoreBeforeKexinit;
-    boolean ignoreDuringKex;
-    boolean debugBeforeNewkeys;
-    boolean corruptSignature;
-    String versionLine = "SSH-2.0-TestSshServer_1.0";
-    String[] linesBeforeVersion = new String[0];
+    public String[] kexAlgs = { "curve25519-sha256", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256" };
+    public String hostKeyType = "ssh-ed25519"; // or ecdsa-sha2-nistp256, ssh-rsa
+    public String[] rsaSigAlgs = { "rsa-sha2-512", "rsa-sha2-256" };
+    public String[] ciphers = { "aes128-ctr", "aes256-ctr", "aes128-gcm@openssh.com", "aes256-gcm@openssh.com" };
+    public String[] macs = { "hmac-sha2-256" };
+    public boolean strict = true;
+    public boolean ignoreBeforeKexinit;
+    public boolean ignoreDuringKex;
+    public boolean debugBeforeNewkeys;
+    public boolean corruptSignature;
+    public String versionLine = "SSH-2.0-TestSshServer_1.0";
+    public String[] linesBeforeVersion = new String[0];
     /** Start a server-side re-key each time this many file bytes went out (-1: never). */
-    long rekeyAfterFileBytes = -1;
+    public long rekeyAfterFileBytes = -1;
 
-    String user = "user";
-    String password = "pw";
-    boolean allowPassword = true;
-    boolean allowKeyboardInteractive;
-    boolean passwordChangeRequired;
-    final List<byte[]> authorizedKeys = new ArrayList<byte[]>();
-    String[] serverSigAlgs; // sent as EXT_INFO when not null
+    public String user = "user";
+    public String password = "pw";
+    public boolean allowPassword = true;
+    public boolean allowKeyboardInteractive;
+    public boolean passwordChangeRequired;
+    public final List<byte[]> authorizedKeys = new ArrayList<byte[]>();
+    public String[] serverSigAlgs; // sent as EXT_INFO when not null
 
-    final Map<String, byte[]> files = new HashMap<String, byte[]>();
-    final Map<String, Long> mtimes = new HashMap<String, Long>();
-    final List<String> directories = new ArrayList<String>();
-    boolean noSftp;
+    public final Map<String, byte[]> files = new HashMap<String, byte[]>();
+    public final Map<String, Long> mtimes = new HashMap<String, Long>();
+    public final List<String> directories = new ArrayList<String>();
+    public boolean noSftp;
     /** Close the socket after this many file bytes, on the first connection only (-1: never). */
-    long cutAfterFileBytes = -1;
+    public long cutAfterFileBytes = -1;
     /** Every n-th READ answers with half of what was asked (0: never). */
-    int shortReadEvery;
-    boolean reverseAnswers;
+    public int shortReadEvery;
+    public boolean reverseAnswers;
 
     // --- observations ---
-    final List<String> log = Collections.synchronizedList(new ArrayList<String>());
-    volatile int connections;
-    volatile int kexCount;
-    volatile String lastCipher, lastKex, lastHostKeyAlg;
+    public final List<String> log = Collections.synchronizedList(new ArrayList<String>());
+    public volatile int connections;
+    public volatile int kexCount;
+    public volatile String lastCipher, lastKex, lastHostKeyAlg;
 
     private final ServerSocket ss;
     private volatile boolean closed;
     private KeyPair hostKeyPair;
     private final SecureRandom random = new SecureRandom();
 
-    TestSshServer() throws IOException {
+    public TestSshServer() throws IOException {
         ss = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
     }
 
-    TestSshServer start() throws Exception {
+    public TestSshServer start() throws Exception {
         hostKeyPair = generate(hostKeyType);
         Thread t = new Thread(this, "TestSshServer");
         t.setDaemon(true);
@@ -108,19 +108,19 @@ final class TestSshServer implements Runnable {
     }
 
     /** A new host key, as if the server had been reinstalled (or replaced by an attacker). */
-    void newHostKey() throws Exception {
+    public void newHostKey() throws Exception {
         hostKeyPair = generate(hostKeyType);
     }
 
-    int port() {
+    public int port() {
         return ss.getLocalPort();
     }
 
-    byte[] hostKeyBlob() throws Exception {
+    public byte[] hostKeyBlob() throws Exception {
         return blob(hostKeyPair.getPublic());
     }
 
-    void close() {
+    public void close() {
         closed = true;
         try {
             ss.close();
@@ -128,7 +128,7 @@ final class TestSshServer implements Runnable {
         }
     }
 
-    static KeyPair generate(String type) throws Exception {
+    public static KeyPair generate(String type) throws Exception {
         if ("ssh-ed25519".equals(type)) return KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         if ("ecdsa-sha2-nistp256".equals(type)) {
             KeyPairGenerator g = KeyPairGenerator.getInstance("EC");
@@ -141,7 +141,7 @@ final class TestSshServer implements Runnable {
     }
 
     /** The SSH public key blob of a JDK public key. */
-    static byte[] blob(PublicKey k) throws Exception {
+    public static byte[] blob(PublicKey k) throws Exception {
         W w = new W();
         if (k instanceof RSAPublicKey) {
             RSAPublicKey r = (RSAPublicKey) k;

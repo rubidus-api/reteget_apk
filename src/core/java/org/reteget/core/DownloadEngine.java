@@ -22,6 +22,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.net.ssl.X509TrustManager;
+import org.reteget.core.ssh.KnownHosts;
+import org.reteget.core.ssh.SftpSession;
+import org.reteget.core.ssh.SshConfig;
+import org.reteget.core.ssh.SshIdentity;
 import org.reteget.core.tls.TlsClient;
 import org.reteget.core.tls.TlsConnection;
 
@@ -35,6 +39,9 @@ import org.reteget.core.tls.TlsConnection;
  * breaks off is continued with {@code Range} / {@code If-Range} (up to three times on its own,
  * and again when the caller passes a {@link Resume}). A 401 is answered with Basic or Digest
  * when the URL carries a user name and password ({@link HttpAuth}).
+ *
+ * <p>sftp:// downloads run over the in-tree SSH client ({@code org.reteget.core.ssh}) with the
+ * same partial file and resume rules; the "validator" there is the remote file's size and time.
  */
 public class DownloadEngine {
 
@@ -100,6 +107,7 @@ public class DownloadEngine {
     private volatile TlsConnection activeTlsConnection;
     private volatile String lastTlsSummary;
     private volatile Socket activePlainSocket;
+    private volatile SftpSession activeSftp;
 
     /** Pauses before the automatic resumes; package-private so tests can shorten them. */
     long[] backoffMs = { 2000, 5000, 10000 };
@@ -136,6 +144,8 @@ public class DownloadEngine {
                 plainSock.close();
             } catch (Exception ignored) {}
         }
+        SftpSession sftp = activeSftp;
+        if (sftp != null) sftp.abort();
     }
 
     private static volatile String appVersion = "";
@@ -172,13 +182,22 @@ public class DownloadEngine {
     /** As above, continuing from the partial file {@code resume} describes when there is one. */
     public void download(final String urlStr, final File destinationDir, final boolean insecure, final boolean forcePureTls,
                          final Resume resume, final Listener listener) {
+        download(urlStr, destinationDir, insecure, forcePureTls, resume, null, listener);
+    }
+
+    /**
+     * As above; {@code sshKey} is the fingerprint of the key in {@link SshConfig#keys()} to log in
+     * with for an sftp:// URL (null: password only).
+     */
+    public void download(final String urlStr, final File destinationDir, final boolean insecure, final boolean forcePureTls,
+                         final Resume resume, final String sshKey, final Listener listener) {
         // Reset before the thread starts, so a cancel() that arrives first is not wiped out.
         cancelled = false;
         lastTlsSummary = null;
         new Thread(new Runnable() {
             @Override
             public void run() {
-                execute(urlStr, destinationDir, insecure, forcePureTls, false, resume, listener);
+                execute(urlStr, destinationDir, insecure, forcePureTls, false, resume, sshKey, listener);
             }
         }, "DownloadThread").start();
     }
@@ -189,6 +208,11 @@ public class DownloadEngine {
      */
     void execute(String urlStr, File destinationDir, boolean insecure, boolean forcePureTls, boolean ownSocket,
                  Resume resume, Listener l) {
+        execute(urlStr, destinationDir, insecure, forcePureTls, ownSocket, resume, null, l);
+    }
+
+    void execute(String urlStr, File destinationDir, boolean insecure, boolean forcePureTls, boolean ownSocket,
+                 Resume resume, String sshKey, Listener l) {
         listener = l;
         dir = destinationDir;
         fileName = null;
@@ -200,6 +224,8 @@ public class DownloadEngine {
         try {
             if (urlStr.toLowerCase(Locale.US).startsWith("ftp://")) {
                 downloadFtp(urlStr, destinationDir, l);
+            } else if (urlStr.toLowerCase(Locale.US).startsWith("sftp://")) {
+                downloadSftp(urlStr, resume, sshKey);
             } else {
                 downloadHttp(urlStr, destinationDir, insecure, forcePureTls, ownSocket, resume, l);
             }
@@ -290,6 +316,100 @@ public class DownloadEngine {
                 if (cancelled || attemptBytes == 0 || validator == null || resumes >= backoffMs.length) throw e;
                 pause(backoffMs[resumes++]);
             }
+        }
+    }
+
+    /** sftp:// with automatic resumes, like HTTP. */
+    private void downloadSftp(String urlStr, Resume resume, String sshKey) throws IOException {
+        if (resume != null && resume.fileName != null && resume.fileName.length() > 0) {
+            fileName = resume.fileName;
+            validator = resume.validator;
+            knownTotal = resume.total;
+        }
+        URI uri;
+        try {
+            uri = new URI(urlStr);
+        } catch (java.net.URISyntaxException e) {
+            throw new IOException("Invalid SFTP URL");
+        }
+        String host = uri.getHost();
+        if (host == null || host.length() == 0) throw new IOException("Invalid SFTP URL: no host");
+        int port = uri.getPort() > 0 ? uri.getPort() : SftpSession.DEFAULT_PORT;
+        HttpAuth.Credentials c = HttpAuth.credentials(uri.getRawUserInfo());
+        if (c == null || c.user.length() == 0) {
+            throw new IOException("An sftp:// address needs a user name, as in sftp://user:password@host/path");
+        }
+        String rawPath = uri.getRawPath() == null ? "" : uri.getRawPath();
+        String path = SftpSession.remotePath(HttpAuth.percentDecode(rawPath));
+        if (path.length() == 0 || path.endsWith("/")) {
+            throw new IOException("The sftp:// address must name a file");
+        }
+        String password = uri.getRawUserInfo().indexOf(':') >= 0 ? c.password : null;
+
+        int resumes = 0;
+        while (true) {
+            attemptBytes = 0;
+            try {
+                sftpAttempt(host, port, c.user, password, sshKey, path);
+                return;
+            } catch (IOException e) {
+                if (cancelled || attemptBytes == 0 || validator == null || resumes >= backoffMs.length) throw e;
+                pause(backoffMs[resumes++]);
+            }
+        }
+    }
+
+    /** One SFTP connection: log in, compare the file with what the partial file came from, fetch the rest. */
+    private void sftpAttempt(String host, int port, String user, String password, String sshKey, String path)
+            throws IOException {
+        checkCancelled();
+        String hostPort = KnownHosts.hostPort(host, port);
+        KnownHosts hosts = SshConfig.knownHosts();
+        SshIdentity identity = sshKey == null || sshKey.length() == 0 ? null : SshConfig.keys().identity(sshKey);
+        SftpSession session = SftpSession.create();
+        activeSftp = session;
+        try {
+            checkCancelled();
+            session.connect(host, port, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, user, password, identity,
+                    hosts.checkFor(hostPort), hosts.keyTypeFor(hostPort));
+            lastTlsSummary = session.summary();
+            SftpSession.FileInfo info = session.stat(path);
+            String current = info.size >= 0 && info.mtime >= 0 ? info.size + ":" + info.mtime : null;
+
+            if (fileName == null) fileName = sanitizeFilename(path.substring(path.lastIndexOf('/') + 1));
+            File part = partFile();
+            long have = part.exists() ? part.length() : 0;
+            boolean append = have > 0 && validator != null && validator.equals(current) && have <= info.size;
+            if (have > 0 && validator != null && !append) notice(NOTICE_RESTARTED, 0);
+            validator = current;
+            knownTotal = info.size;
+            long offset = append ? have : 0;
+
+            if (!dir.exists()) dir.mkdirs();
+            if (listener != null) listener.onStart(fileName, knownTotal);
+            if (listener instanceof ResumeListener) {
+                ((ResumeListener) listener).onPartial(part.getAbsolutePath(), validator, knownTotal);
+            }
+            if (append) notice(NOTICE_RESUMED, offset);
+
+            final Sink sink = new Sink(append, offset);
+            try {
+                if (!(append && offset == info.size)) {
+                    session.read(path, offset, info.size, new SftpSession.Sink() {
+                        public void write(byte[] b, int off, int len) throws IOException {
+                            sink.write(b, off, len);
+                        }
+                    });
+                }
+            } finally {
+                sink.close();
+            }
+            checkCancelled();
+            finishPart(sink.speed);
+            session.close();
+        } finally {
+            session.abort();
+            activeSftp = null;
         }
     }
 
@@ -677,8 +797,12 @@ public class DownloadEngine {
         }
 
         void write(byte[] b, int n) throws IOException {
+            write(b, 0, n);
+        }
+
+        void write(byte[] b, int off, int n) throws IOException {
             checkCancelled();
-            out.write(b, 0, n);
+            out.write(b, off, n);
             written += n;
             attemptBytes += n;
             long now = System.currentTimeMillis();
