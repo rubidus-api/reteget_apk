@@ -65,6 +65,9 @@ public class TestRunner {
         org.reteget.core.tls.TlsTests.run();
         passed += org.reteget.core.tls.TlsTests.passed;
         failed += org.reteget.core.tls.TlsTests.failed;
+        FtpEngineTests.run();
+        passed += FtpEngineTests.passed;
+        failed += FtpEngineTests.failed;
 
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");

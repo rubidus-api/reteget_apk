@@ -63,6 +63,52 @@ public abstract class CertificatePolicy {
         };
     }
 
+    /**
+     * Validation with a per-server record, for servers whose certificates no authority signed
+     * (a NAS, a private FTPS server). With a fingerprint on record, exactly that certificate is
+     * accepted and any other is refused; without one, the chain is validated as usual and a
+     * failure is reported as a {@link TlsPinException} carrying the fingerprint to confirm.
+     *
+     * @param recorded the SHA-256 fingerprint on record for this server (see {@link #fingerprint}), or null
+     */
+    public static CertificatePolicy pinned(final X509TrustManager trustManager, final String recorded) {
+        final CertificatePolicy usual = trusting(trustManager);
+        return new CertificatePolicy() {
+            @Override
+            public void check(String host, X509Cert[] chain, X509Certificate[] platformChain)
+                    throws CertificateException {
+                String fp = fingerprint(chain[0].der);
+                if (recorded != null) {
+                    if (!recorded.equals(fp)) throw new TlsPinException(true, fp, null);
+                    return;
+                }
+                try {
+                    usual.check(host, chain, platformChain);
+                } catch (TlsPinException e) {
+                    throw e;
+                } catch (CertificateException e) {
+                    throw new TlsPinException(false, fp, String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    /** SHA-256 of a certificate as tools print it: upper-case hex pairs joined by colons. */
+    public static String fingerprint(byte[] der) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(der);
+            StringBuilder sb = new StringBuilder(95);
+            for (int i = 0; i < d.length; i++) {
+                if (i > 0) sb.append(':');
+                sb.append(Character.toUpperCase(Character.forDigit((d[i] >> 4) & 0xf, 16)));
+                sb.append(Character.toUpperCase(Character.forDigit(d[i] & 0xf, 16)));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** Accepts any certificate. Used only when the user turned verification off. */
     public static CertificatePolicy insecure() {
         return new CertificatePolicy() {

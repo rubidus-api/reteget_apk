@@ -195,7 +195,7 @@ public final class TlsTests {
 
     // ------------------------------------------------------------------ assertions
 
-    static void check(String name, boolean ok) {
+    public static void check(String name, boolean ok) {
         if (ok) {
             passed++;
             System.out.println("  PASS: " + name);
@@ -241,7 +241,7 @@ public final class TlsTests {
         return RsaVerifier.hex(s);
     }
 
-    static String hex(byte[] b) {
+    public static String hex(byte[] b) {
         StringBuilder sb = new StringBuilder();
         for (byte x : b) {
             sb.append(String.format("%02x", x & 0xff));
@@ -675,7 +675,7 @@ public final class TlsTests {
     }
 
     /** Creates a self-signed PKCS#12 key store with keytool; returns null when keytool is missing. */
-    static File keystore(String name, String keyArgs, String san) throws Exception {
+    public static File keystore(String name, String keyArgs, String san) throws Exception {
         File ks = new File(fixtureDir(), name + ".p12");
         if (ks.exists()) {
             ks.delete();
@@ -693,7 +693,7 @@ public final class TlsTests {
         return p.waitFor() == 0 ? ks : null;
     }
 
-    static KeyStore load(File f) throws Exception {
+    public static KeyStore load(File f) throws Exception {
         KeyStore ks = KeyStore.getInstance("PKCS12");
         FileInputStream in = new FileInputStream(f);
         try {
@@ -704,7 +704,7 @@ public final class TlsTests {
         return ks;
     }
 
-    static X509TrustManager trustManagerFor(File f) throws Exception {
+    public static X509TrustManager trustManagerFor(File f) throws Exception {
         KeyStore trust = KeyStore.getInstance("PKCS12");
         trust.load(null, null);
         trust.setCertificateEntry("anchor", load(f).getCertificate("server"));

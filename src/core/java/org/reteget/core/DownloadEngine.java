@@ -42,6 +42,7 @@ import org.reteget.core.tls.TlsConnection;
  *
  * <p>sftp:// downloads run over the in-tree SSH client ({@code org.reteget.core.ssh}) with the
  * same partial file and resume rules; the "validator" there is the remote file's size and time.
+ * ftp://, ftpes:// and ftps:// go through {@link FtpClient}, resuming with REST.
  */
 public class DownloadEngine {
 
@@ -108,6 +109,7 @@ public class DownloadEngine {
     private volatile String lastTlsSummary;
     private volatile Socket activePlainSocket;
     private volatile SftpSession activeSftp;
+    private volatile FtpClient activeFtp;
 
     /** Pauses before the automatic resumes; package-private so tests can shorten them. */
     long[] backoffMs = { 2000, 5000, 10000 };
@@ -146,6 +148,8 @@ public class DownloadEngine {
         }
         SftpSession sftp = activeSftp;
         if (sftp != null) sftp.abort();
+        FtpClient ftp = activeFtp;
+        if (ftp != null) ftp.abort();
     }
 
     private static volatile String appVersion = "";
@@ -222,8 +226,9 @@ public class DownloadEngine {
         credentials = null;
         cleartextNoticeSent = false;
         try {
-            if (urlStr.toLowerCase(Locale.US).startsWith("ftp://")) {
-                downloadFtp(urlStr, destinationDir, l);
+            String lower = urlStr.toLowerCase(Locale.US);
+            if (lower.startsWith("ftp://") || lower.startsWith("ftpes://") || lower.startsWith("ftps://")) {
+                downloadFtp(urlStr, resume);
             } else if (urlStr.toLowerCase(Locale.US).startsWith("sftp://")) {
                 downloadSftp(urlStr, resume, sshKey);
             } else {
@@ -240,43 +245,127 @@ public class DownloadEngine {
         }
     }
 
-    private void downloadFtp(String urlStr, File destinationDir, final Listener listener) throws IOException {
-        final long[] lastTime = { System.currentTimeMillis() };
-        final long[] lastBytes = { 0 };
-
-        File file = FtpDownloader.download(urlStr, destinationDir, new FtpDownloader.DownloadCallback() {
-            @Override
-            public void onStart(String filename, long totalBytes) {
-                if (listener != null) {
-                    listener.onStart(filename, totalBytes);
-                }
-            }
-
-            @Override
-            public void onProgress(long bytesDownloaded, long totalBytes) {
-                if (listener != null) {
-                    long now = System.currentTimeMillis();
-                    long dt = now - lastTime[0];
-                    long speed = 0;
-                    if (dt >= 500) {
-                        speed = ((bytesDownloaded - lastBytes[0]) * 1000) / dt;
-                        lastTime[0] = now;
-                        lastBytes[0] = bytesDownloaded;
-                    }
-                    int pct = totalBytes > 0 ? (int) ((bytesDownloaded * 100) / totalBytes) : -1;
-                    listener.onProgress(bytesDownloaded, totalBytes, pct, speed);
-                }
-            }
-
-            @Override
-            public boolean isCancelled() {
-                return cancelled;
-            }
-        });
-
-        if (listener != null) {
-            listener.onComplete(file);
+    /** ftp://, ftpes:// and ftps:// with automatic resumes, like HTTP. */
+    private void downloadFtp(String urlStr, Resume resume) throws IOException {
+        if (resume != null && resume.fileName != null && resume.fileName.length() > 0) {
+            fileName = resume.fileName;
+            validator = resume.validator;
+            knownTotal = resume.total;
         }
+        URI uri;
+        try {
+            uri = new URI(urlStr);
+        } catch (java.net.URISyntaxException e) {
+            throw new IOException("Invalid FTP URL");
+        }
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.US);
+        String host = uri.getHost();
+        if (host == null || host.length() == 0) throw new IOException("Invalid FTP URL: no host");
+        int port = uri.getPort() > 0 ? uri.getPort() : FtpClient.defaultPort(scheme);
+        HttpAuth.Credentials c = HttpAuth.credentials(uri.getRawUserInfo());
+        String user = c == null ? "anonymous" : c.user;
+        String password = c == null ? "anonymous@reteget.org" : c.password;
+        String path = HttpAuth.percentDecode(uri.getRawPath() == null ? "" : uri.getRawPath());
+        if (path.length() == 0 || path.endsWith("/")) {
+            throw new IOException("The FTP address must name a file");
+        }
+        boolean secretInClear = FtpClient.FTP.equals(scheme) && c != null && c.password.length() > 0;
+
+        int resumes = 0;
+        while (true) {
+            attemptBytes = 0;
+            try {
+                ftpAttempt(scheme, host, port, user, password, path, secretInClear);
+                return;
+            } catch (IOException e) {
+                if (cancelled || attemptBytes == 0 || validator == null || resumes >= backoffMs.length) throw e;
+                pause(backoffMs[resumes++]);
+            }
+        }
+    }
+
+    /** The trust manager for FTPS certificate checks; tests replace it. */
+    static volatile javax.net.ssl.X509TrustManager ftpsTrustManagerForTest;
+
+    /** One FTP session: log in, compare the file with what the partial file came from, fetch the rest. */
+    private void ftpAttempt(String scheme, String host, int port, String user, String password, String path,
+                            boolean secretInClear) throws IOException {
+        checkCancelled();
+        boolean tls = !FtpClient.FTP.equals(scheme);
+        String hostPort = TlsPins.hostPort(host, port);
+        org.reteget.core.tls.CertificatePolicy policy = null;
+        if (tls) {
+            X509TrustManager tm = ftpsTrustManagerForTest != null ? ftpsTrustManagerForTest : TlsHelper.getTrustManager(false);
+            policy = TlsPins.get().policyFor(hostPort, tm);
+        }
+        FtpClient ftp = new FtpClient(scheme, host, port, user, password, policy);
+        activeFtp = ftp;
+        try {
+            checkCancelled();
+            try {
+                ftp.connect(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            } catch (IOException e) {
+                throw tls ? TlsPins.get().question(hostPort, e) : e;
+            }
+            lastTlsSummary = ftp.summary();
+            if (secretInClear && !cleartextNoticeSent) {
+                cleartextNoticeSent = true;
+                notice(NOTICE_CLEARTEXT_PASSWORD, 0);
+            }
+            FtpClient.Info info = ftp.stat(path);
+            String current = info.size >= 0 && info.modified != null ? info.size + ":" + info.modified : null;
+
+            if (fileName == null) fileName = sanitizeFilename(path.substring(path.lastIndexOf('/') + 1));
+            File part = partFile();
+            long have = part.exists() ? part.length() : 0;
+            boolean append = have > 0 && validator != null && validator.equals(current) && have <= info.size;
+            if (have > 0 && validator != null && !append) notice(NOTICE_RESTARTED, 0);
+            validator = current;
+            knownTotal = info.size;
+            long offset = append ? have : 0;
+
+            if (!dir.exists()) dir.mkdirs();
+            if (listener != null) listener.onStart(fileName, knownTotal);
+            if (listener instanceof ResumeListener) {
+                ((ResumeListener) listener).onPartial(part.getAbsolutePath(), validator, knownTotal);
+            }
+
+            Sink sink = null;
+            try {
+                if (append && offset == info.size) {
+                    notice(NOTICE_RESUMED, offset);
+                } else {
+                    sink = new Sink(append, offset);
+                    try {
+                        ftp.retrieve(path, offset, info.size, sinkOf(sink));
+                        if (append) notice(NOTICE_RESUMED, offset);
+                    } catch (FtpClient.RestRefusedException e) {
+                        // The server cannot start in the middle: fetch the whole file again.
+                        sink.close();
+                        notice(NOTICE_RESTARTED, 0);
+                        sink = new Sink(false, 0);
+                        ftp.retrieve(path, 0, info.size, sinkOf(sink));
+                    }
+                }
+            } finally {
+                if (sink != null) sink.close();
+            }
+            lastTlsSummary = ftp.summary();
+            checkCancelled();
+            finishPart(sink == null ? 0 : sink.speed);
+            ftp.close();
+        } finally {
+            ftp.abort();
+            activeFtp = null;
+        }
+    }
+
+    private static FtpClient.Sink sinkOf(final Sink sink) {
+        return new FtpClient.Sink() {
+            public void write(byte[] b, int off, int len) throws IOException {
+                sink.write(b, off, len);
+            }
+        };
     }
 
     /** HTTP(S) with the system stack, falling back to the in-tree TLS, and automatic resumes. */

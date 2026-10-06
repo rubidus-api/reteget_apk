@@ -350,8 +350,7 @@ public final class DownloadQueue {
                     t.state = DownloadTask.State.FAILED;
                     String m = HttpAuth.mask(ex.getMessage());
                     t.error = m != null && !m.isEmpty() ? m : ex.getClass().getSimpleName();
-                    t.ask = ex instanceof org.reteget.core.ssh.SshPromptException
-                            ? ((org.reteget.core.ssh.SshPromptException) ex).token() : null;
+                    t.ask = ex instanceof UserQuestion ? ((UserQuestion) ex).token() : null;
                     if (t.partFile() == null) {
                         t.partPath = null; // the engine kept nothing to continue from
                         t.validator = null;

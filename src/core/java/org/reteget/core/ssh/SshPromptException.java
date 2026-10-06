@@ -6,7 +6,7 @@ package org.reteget.core.ssh;
  * this; {@link #token} travels in the queue record so the question can be asked later, also
  * after the app was closed.
  */
-public final class SshPromptException extends SshException {
+public final class SshPromptException extends SshException implements org.reteget.core.UserQuestion {
 
     public static final String UNKNOWN_HOST = "hostkey";
     public static final String CHANGED_HOST = "hostkey-changed";
