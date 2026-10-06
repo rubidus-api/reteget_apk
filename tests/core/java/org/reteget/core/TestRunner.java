@@ -56,6 +56,9 @@ public class TestRunner {
         HttpTests.run();
         passed += HttpTests.passed;
         failed += HttpTests.failed;
+        org.reteget.core.ssh.SshTests.run();
+        passed += org.reteget.core.ssh.SshTests.passed;
+        failed += org.reteget.core.ssh.SshTests.failed;
         org.reteget.core.tls.TlsTests.run();
         passed += org.reteget.core.tls.TlsTests.passed;
         failed += org.reteget.core.tls.TlsTests.failed;
