@@ -613,8 +613,12 @@ public final class TlsTests {
                 sealHandshake(new byte[][] { cat(ee, h(CERT), h(CV), finishedMsg()) }));
 
         byte[] certReq = TlsWriter.handshake(13, new TlsWriter().vec8(new byte[0]).vec16(new byte[0]).toByteArray());
-        replayExpect("CertificateRequest -> handshake_failure (client auth unsupported)",
-                TlsException.HANDSHAKE_FAILURE, sealHandshake(new byte[][] { cat(h(EE), certReq) }));
+        // A CertificateRequest is accepted (and answered with an empty Certificate); it does not
+        // replace the server's own Certificate, and a second one is out of order.
+        replayExpect("CertificateRequest, then Finished without the server Certificate -> unexpected_message",
+                TlsException.UNEXPECTED_MESSAGE, sealHandshake(new byte[][] { cat(h(EE), certReq, finishedMsg()) }));
+        replayExpect("two CertificateRequests -> unexpected_message",
+                TlsException.UNEXPECTED_MESSAGE, sealHandshake(new byte[][] { cat(h(EE), certReq, certReq) }));
 
         replayExpect("Finished before Certificate -> unexpected_message", TlsException.UNEXPECTED_MESSAGE,
                 sealHandshake(new byte[][] { cat(h(EE), finishedMsg()) }));

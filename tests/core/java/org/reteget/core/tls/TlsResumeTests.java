@@ -203,6 +203,38 @@ public final class TlsResumeTests {
             } finally {
                 s.close();
             }
+
+            // A server that asks for a client certificate (vsftpd does by default) is told "none".
+            Server w = new Server(ec, tls13 ? "TLSv1.3" : "TLSv1.2");
+            try {
+                w.ss.setWantClientAuth(true);
+                TlsConnection c1 = open(w, tls13, policy, null, true);
+                String a = talk(c1, "cert?");
+                TlsTests.check(name + ": an optional client certificate request is answered with none", a.endsWith(" cert?"));
+                TlsConnection c2 = open(w, tls13, policy, c1.session(), false);
+                TlsTests.check(name + ": and such a session resumes", c2.wasResumed() && talk(c2, "r").endsWith(" r"));
+                c2.close();
+                c1.close();
+            } catch (Exception e) {
+                TlsTests.check(name + " client certificate request: " + e, false);
+            } finally {
+                w.close();
+            }
+            Server need = new Server(ec, tls13 ? "TLSv1.3" : "TLSv1.2");
+            try {
+                need.ss.setNeedClientAuth(true);
+                boolean refused = false;
+                try {
+                    TlsConnection c = open(need, tls13, policy, null, false);
+                    talk(c, "x"); // TLS 1.3: the server's refusal arrives after our Finished
+                    refused = need.seen.isEmpty() || need.seen.get(0).startsWith("error");
+                } catch (java.io.IOException e) {
+                    refused = true;
+                }
+                TlsTests.check(name + ": a server that insists on a client certificate ends the connection", refused);
+            } finally {
+                need.close();
+            }
         }
     }
 }

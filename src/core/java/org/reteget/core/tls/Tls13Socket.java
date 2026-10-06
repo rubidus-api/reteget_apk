@@ -25,8 +25,8 @@ import java.util.Set;
  *
  * Profile: TLS_AES_128_GCM_SHA256; key exchange X25519 (sent first) or secp256r1 (sent after a
  * HelloRetryRequest asks for it); server signatures ECDSA P-256/P-384 and RSA-PSS. Not
- * supported, and refused explicitly: 0-RTT, client certificates. KeyUpdate is honoured in both
- * directions.
+ * supported: 0-RTT and client certificates (a request for one is answered with "none").
+ * KeyUpdate is honoured in both directions.
  *
  * Resumption (RFC 8446 sections 2.2 and 4.2.11: a ticket's pre-shared key with a fresh
  * (EC)DHE exchange, psk_dhe_ke) exists for one caller: the FTPS data connection, which must
@@ -159,6 +159,8 @@ public final class Tls13Socket implements TlsConnection {
     private byte[] resumptionMaster;
     private boolean resumed;
     private boolean closeNotifyReceived;
+    /** The context of the server's CertificateRequest, or null when it sent none. */
+    private byte[] certificateRequestContext;
     /** The ALPN protocol offered, or null for none (FTP has no use for one). */
     private byte[] alpn = ALPN_HTTP11;
     /** Tickets are kept for at most this long, whatever the server says (RFC 8446: at most 7 days). */
@@ -496,8 +498,16 @@ public final class Tls13Socket implements TlsConnection {
             writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, VERSION_TLS12);
         }
         writeProtection = new Protection(clientHs);
+        byte[] finishedOver = serverFinishedHash;
+        if (certificateRequestContext != null) {
+            byte[] none = TlsWriter.handshake(HT_CERTIFICATE,
+                    new TlsWriter().vec8(certificateRequestContext).vec24(EMPTY).toByteArray());
+            writeProtected(CT_HANDSHAKE, none);
+            transcript.write(none);
+            finishedOver = transcriptHash();
+        }
         byte[] clientVerify = Hkdf.hmac(Hkdf.expandLabel(clientHs, "finished", EMPTY, Hkdf.HASH_LEN),
-                serverFinishedHash);
+                finishedOver);
         byte[] clientFinished = TlsWriter.handshake(HT_FINISHED, clientVerify);
         writeProtected(CT_HANDSHAKE, clientFinished);
         out.flush();
@@ -516,11 +526,17 @@ public final class Tls13Socket implements TlsConnection {
 
     /** Certificate and CertificateVerify of a full handshake; both join the transcript. */
     private void readServerCertificate(ClientHelloInfo offered) throws Exception {
-        // Certificate (a CertificateRequest here means the server wants client authentication)
+        // A CertificateRequest may come first: the server asks for a client certificate. There is
+        // none to give; the answer is an empty Certificate (RFC 8446 section 4.4.2), and a server
+        // that insists on one ends the handshake itself.
         byte[] certMsg = nextHandshakeMessage();
         if (type(certMsg) == HT_CERTIFICATE_REQUEST) {
-            throw new TlsException(TlsException.HANDSHAKE_FAILURE,
-                    "server requires a client certificate, which is not supported");
+            TlsReader q = body(certMsg);
+            certificateRequestContext = q.vec8();
+            q.vec16();
+            q.expectEnd();
+            transcript.write(certMsg);
+            certMsg = nextHandshakeMessage();
         }
         if (type(certMsg) != HT_CERTIFICATE) {
             throw unexpected("expected Certificate");

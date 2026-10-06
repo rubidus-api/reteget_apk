@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ReteGet</string>
-    <string name="url_hint">다운로드 주소 입력 (http, https, ftp, sftp)</string>
+    <string name="url_hint">다운로드 주소 입력 (http, https, ftp, ftpes, ftps, sftp)</string>
     <string name="target_url">다운로드 대상 주소:</string>
     <string name="btn_download">다운로드</string>
     <string name="btn_cancel">취소</string>
@@ -137,6 +137,13 @@
     <string name="ssh_wait_unknown">대기: %1$s의 호스트 키 확인 필요</string>
     <string name="ssh_wait_changed">중단: %1$s의 호스트 키가 바뀜</string>
     <string name="ssh_wait_passphrase">대기: 키 \"%1$s\"의 암호 필요</string>
+    <string name="tls_cert_unknown_title">확인되지 않는 인증서</string>
+    <string name="tls_cert_unknown_msg">%1$s의 인증서를 검증할 수 없습니다:\n%2$s\n\nNAS나 사설 서버의 자체 서명 인증서에서는 흔한 일입니다. SHA-256 지문:\n%3$s\n\n서버가 보여 주는 지문과 비교하세요. 일치할 때만 신뢰하세요. 이후로 이 서버는 정확히 이 인증서를 제시해야 합니다.</string>
+    <string name="tls_cert_changed_title">경고: 서버의 인증서가 바뀌었습니다</string>
+    <string name="tls_cert_changed_msg">%1$s의 인증서가 기록된 것과 다릅니다.\n\n기록:\n%2$s\n\n지금:\n%3$s\n\n서버가 인증서를 갱신했을 수도 있고, 누군가 연결을 가로채고 있을 수도 있습니다. 바뀐 이유를 알 때만 기록을 바꾸세요.</string>
+    <string name="tls_btn_replace">기록 바꾸기</string>
+    <string name="tls_wait_unknown">대기: %1$s의 인증서 확인 필요</string>
+    <string name="tls_wait_changed">중단: %1$s의 인증서가 바뀜</string>
     <string name="btn_paste">붙여넣기</string>
     <string name="btn_clear_url">지우기</string>
     <string name="toast_clipboard_empty">클립보드가 비어 있습니다</string>

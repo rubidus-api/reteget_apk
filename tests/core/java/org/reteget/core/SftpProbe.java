@@ -12,12 +12,13 @@ import org.reteget.core.ssh.SshKeyStore;
 import org.reteget.core.ssh.SshPromptException;
 
 /**
- * Command-line check of sftp:// downloads against a live server, runnable on a desktop JVM or on
+ * Command-line check of sftp:// (and ftp://, ftpes://, ftps://) downloads against a live server, runnable on a desktop JVM or on
  * a device with app_process:
  *
  *   SftpProbe <sftp://user[:password]@host[:port]/path> <output dir> [private key file [passphrase]]
+ *   SftpProbe <ftpes://user:password@host[:port]/path> <output dir>
  *
- * The host key is accepted on first sight and printed (this is a test tool, not the app's
+ * The host key (or an FTPS certificate that does not validate) is accepted on first sight and printed (this is a test tool, not the app's
  * behaviour). Prints the connection summary, timings, the file size and its SHA-256.
  */
 public final class SftpProbe {
@@ -73,6 +74,12 @@ public final class SftpProbe {
                 SshPromptException q = (SshPromptException) error[0];
                 System.out.println("host key " + q.keyType + " " + q.fingerprint + " of " + q.hostPort + " accepted for this run");
                 hosts.trust(q);
+                continue;
+            }
+            if (error[0] instanceof TlsCertQuestion && attempt == 0) {
+                TlsCertQuestion q = (TlsCertQuestion) error[0];
+                System.out.println("certificate of " + q.hostPort + " (" + q.reason + ") " + q.fingerprint + " accepted for this run");
+                TlsPins.get().trust(q);
                 continue;
             }
             if (error[0] != null) {

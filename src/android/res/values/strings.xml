@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ReteGet</string>
-    <string name="url_hint">Enter download URL (http, https, ftp, sftp)</string>
+    <string name="url_hint">Enter download URL (http, https, ftp, ftpes, ftps, sftp)</string>
     <string name="target_url">Target URL:</string>
     <string name="btn_download">Download</string>
     <string name="btn_cancel">Cancel</string>
@@ -137,6 +137,13 @@
     <string name="ssh_wait_unknown">Waiting: confirm the host key of %1$s</string>
     <string name="ssh_wait_changed">Stopped: the host key of %1$s has changed</string>
     <string name="ssh_wait_passphrase">Waiting: passphrase of the key \"%1$s\"</string>
+    <string name="tls_cert_unknown_title">Unknown certificate</string>
+    <string name="tls_cert_unknown_msg">The certificate of %1$s cannot be verified:\n%2$s\n\nThis is usual for a NAS or a private server with a self-signed certificate. Its SHA-256 fingerprint:\n%3$s\n\nCompare it with the one the server shows. Trust it only if they match; from then on this server must present exactly this certificate.</string>
+    <string name="tls_cert_changed_title">WARNING: the server\'s certificate has changed</string>
+    <string name="tls_cert_changed_msg">The certificate of %1$s is not the one on record.\n\nOn record:\n%2$s\n\nNow:\n%3$s\n\nThe server may have renewed its certificate, or someone may be intercepting the connection. Replace the record only if you know why it changed.</string>
+    <string name="tls_btn_replace">Replace</string>
+    <string name="tls_wait_unknown">Waiting: confirm the certificate of %1$s</string>
+    <string name="tls_wait_changed">Stopped: the certificate of %1$s has changed</string>
     <string name="btn_paste">Paste</string>
     <string name="btn_clear_url">Clear</string>
     <string name="toast_clipboard_empty">The clipboard is empty</string>

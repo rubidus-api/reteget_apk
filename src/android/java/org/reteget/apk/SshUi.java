@@ -16,6 +16,8 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.List;
 import org.reteget.core.DownloadTask;
+import org.reteget.core.TlsCertQuestion;
+import org.reteget.core.TlsPins;
 import org.reteget.core.ssh.KnownHosts;
 import org.reteget.core.ssh.SshConfig;
 import org.reteget.core.ssh.SshKeyFile;
@@ -23,7 +25,7 @@ import org.reteget.core.ssh.SshKeyStore;
 import org.reteget.core.ssh.SshPromptException;
 
 /**
- * The screens of sftp:// downloads: confirming a server's host key, the user's keys (generate,
+ * The screens of sftp:// and FTPS downloads: confirming an FTPS server's certificate, confirming a server's host key, the user's keys (generate,
  * import, passphrase, public key, delete), choosing the key for an address, and asking for a
  * key's passphrase. Everything is a plain AlertDialog, so it works from Android 2.3 on.
  */
@@ -32,6 +34,7 @@ final class SshUi {
     private static final String PREFS = "reteget_ssh";
     private static final String KEY_HOSTS = "known_hosts";
     private static final String KEY_KEYS = "keys";
+    private static final String KEY_CERTS = "ftps_certs";
     /** Dialog labels: the app theme's text is dark, but the (pre-Holo) dialog frame is dark. */
     private static final int LABEL = 0xFFCCCCCC;
 
@@ -69,6 +72,15 @@ final class SshUi {
             }
         });
         SshConfig.set(hosts, keys);
+        TlsPins.set(new TlsPins(new TlsPins.Store() {
+            public String load() {
+                return sp.getString(KEY_CERTS, null);
+            }
+
+            public void save(String data) {
+                sp.edit().putString(KEY_CERTS, data).commit();
+            }
+        }));
         sInitialised = true;
     }
 
@@ -418,6 +430,10 @@ final class SshUi {
 
     /** The short status text for a queue entry that waits for an answer, or null when it does not. */
     String waitingText(DownloadTask t) {
+        TlsCertQuestion c = TlsCertQuestion.fromToken(t.ask);
+        if (c != null) {
+            return a.getString(TlsCertQuestion.CHANGED.equals(c.kind) ? R.string.tls_wait_changed : R.string.tls_wait_unknown, c.hostPort);
+        }
         SshPromptException q = SshPromptException.fromToken(t.ask);
         if (q == null) return null;
         if (SshPromptException.PASSPHRASE.equals(q.kind)) return a.getString(R.string.ssh_wait_passphrase, q.identityName);
@@ -427,6 +443,8 @@ final class SshUi {
 
     /** The label of the button that answers the entry's question. */
     int answerLabel(DownloadTask t) {
+        TlsCertQuestion c = TlsCertQuestion.fromToken(t.ask);
+        if (c != null) return TlsCertQuestion.CHANGED.equals(c.kind) ? R.string.tls_btn_replace : R.string.ssh_btn_trust;
         SshPromptException q = SshPromptException.fromToken(t.ask);
         if (q == null) return 0;
         if (SshPromptException.PASSPHRASE.equals(q.kind)) return R.string.ssh_btn_unlock;
@@ -435,6 +453,23 @@ final class SshUi {
 
     /** Asks the entry's question; {@code retry} runs when the answer lets the download go on. */
     void answer(DownloadTask t, final Runnable retry) {
+        final TlsCertQuestion c = TlsCertQuestion.fromToken(t.ask);
+        if (c != null) {
+            boolean other = TlsCertQuestion.CHANGED.equals(c.kind);
+            new AlertDialog.Builder(a)
+                    .setTitle(other ? R.string.tls_cert_changed_title : R.string.tls_cert_unknown_title)
+                    .setMessage(other ? a.getString(R.string.tls_cert_changed_msg, c.hostPort, c.oldFingerprint, c.fingerprint)
+                            : a.getString(R.string.tls_cert_unknown_msg, c.hostPort, c.reason, c.fingerprint))
+                    .setPositiveButton(other ? R.string.tls_btn_replace : R.string.ssh_btn_trust, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            TlsPins.get().trust(c);
+                            retry.run();
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
         final SshPromptException q = SshPromptException.fromToken(t.ask);
         if (q == null) return;
         if (SshPromptException.PASSPHRASE.equals(q.kind)) {

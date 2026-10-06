@@ -1216,8 +1216,9 @@ public class MainActivity extends Activity {
 
         String lower = url.toLowerCase();
         if (!lower.startsWith("http://") && !lower.startsWith("https://") && !lower.startsWith("ftp://")
-                && !lower.startsWith("sftp://")) {
-            Toast.makeText(this, "URL must start with http://, https://, ftp://, or sftp://", Toast.LENGTH_LONG).show();
+                && !lower.startsWith("sftp://") && !lower.startsWith("ftpes://") && !lower.startsWith("ftps://")) {
+            Toast.makeText(this, "URL must start with http://, https://, ftp://, ftpes://, ftps://, or sftp://",
+                    Toast.LENGTH_LONG).show();
             return;
         }
 

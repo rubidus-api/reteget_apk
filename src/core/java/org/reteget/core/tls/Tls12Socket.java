@@ -20,8 +20,9 @@ import java.util.Set;
  * Profile: ECDHE_ECDSA / ECDHE_RSA with AES_128_GCM_SHA256 (RFC 5289), key exchange
  * X25519 or secp256r1, Extended Master Secret when the server supports it (RFC 7627).
  * The ServerKeyExchange signature, the certificate chain and host name, and the server
- * Finished are all verified before any application data is exchanged. Renegotiation,
- * client certificates and static RSA key exchange are not supported.
+ * Finished are all verified before any application data is exchanged. Renegotiation and
+ * static RSA key exchange are not supported; a request for a client certificate is answered
+ * with "none".
  *
  * Session resumption by session id (RFC 5246 section 7.3, abbreviated handshake) exists for one
  * caller: the FTPS data connection, which must reuse the control connection's session. A
@@ -396,13 +397,23 @@ public final class Tls12Socket implements TlsConnection {
         if (!ok) throw new TlsException(TlsException.DECRYPT_ERROR, "ServerKeyExchange signature is invalid");
         signatureName = SignatureSchemes.name(scheme);
 
-        // ServerHelloDone (a CertificateRequest here means client authentication)
+        // ServerHelloDone, perhaps after a CertificateRequest. There is no client certificate to
+        // give; the answer is an empty Certificate (RFC 5246 section 7.4.6), and a server that
+        // insists on one ends the handshake itself.
         byte[] done = nextHandshakeMessage();
+        boolean certificateRequested = false;
         if (type(done) == HT_CERTIFICATE_REQUEST) {
-            throw new TlsException(TlsException.HANDSHAKE_FAILURE, "server requires a client certificate, which is not supported");
+            certificateRequested = true;
+            transcript.write(done);
+            done = nextHandshakeMessage();
         }
         if (type(done) != HT_SERVER_HELLO_DONE || done.length != 4) throw unexpected("expected ServerHelloDone");
         transcript.write(done);
+        byte[] noCertificate = null;
+        if (certificateRequested) {
+            noCertificate = TlsWriter.handshake(HT_CERTIFICATE, new TlsWriter().vec24(new byte[0]).toByteArray());
+            transcript.write(noCertificate);
+        }
 
         // Key exchange
         byte[] ourPublic;
@@ -441,6 +452,7 @@ public final class Tls12Socket implements TlsConnection {
         byte[] serverSalt = Arrays.copyOfRange(keyBlock, 36, 40);
         Arrays.fill(keyBlock, (byte) 0);
 
+        if (noCertificate != null) writePlain(CT_HANDSHAKE, noCertificate, 0x0303);
         writePlain(CT_HANDSHAKE, cke, 0x0303);
         writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, 0x0303);
         byte[] clientFinished = TlsWriter.handshake(HT_FINISHED,
