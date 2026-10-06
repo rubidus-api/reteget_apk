@@ -20,8 +20,12 @@ import java.util.Set;
  * Profile: ECDHE_ECDSA / ECDHE_RSA with AES_128_GCM_SHA256 (RFC 5289), key exchange
  * X25519 or secp256r1, Extended Master Secret when the server supports it (RFC 7627).
  * The ServerKeyExchange signature, the certificate chain and host name, and the server
- * Finished are all verified before any application data is exchanged. Resumption,
- * renegotiation, client certificates and static RSA key exchange are not supported.
+ * Finished are all verified before any application data is exchanged. Renegotiation,
+ * client certificates and static RSA key exchange are not supported.
+ *
+ * Session resumption by session id (RFC 5246 section 7.3, abbreviated handshake) exists for one
+ * caller: the FTPS data connection, which must reuse the control connection's session. A
+ * connection keeps a resumable {@link TlsSession} only when it was opened asking for one.
  *
  * A separate state machine from {@link Tls13Socket}, as RFC-0002 section 15 asks.
  */
@@ -86,6 +90,12 @@ public final class Tls12Socket implements TlsConnection {
     private String signatureName = "";
     private boolean extendedMasterSecret;
 
+    private TlsSession resume;
+    private boolean keepSession;
+    private TlsSession session;
+    private boolean resumed;
+    private boolean closeNotifyReceived;
+
     private final InputStream appIn = new InputStream() {
         @Override
         public int read() throws IOException {
@@ -142,7 +152,27 @@ public final class Tls12Socket implements TlsConnection {
             s.connect(new InetSocketAddress(host, port), timeoutMs);
             s.setSoTimeout(timeoutMs);
             s.setTcpNoDelay(true);
+        } catch (IOException e) {
+            try { s.close(); } catch (IOException ignored) {}
+            throw e;
+        }
+        return over(s, host, policy, null, false);
+    }
+
+    /**
+     * A handshake on a socket that is already connected (FTPS: after AUTH TLS, or a data
+     * connection). The socket is closed when the handshake fails.
+     *
+     * @param resume      a TLS 1.2 session to resume, or null for a full handshake
+     * @param keepSession keep a {@link #session()} for a later connection to resume
+     */
+    public static Tls12Socket over(Socket s, String host, CertificatePolicy policy, TlsSession resume, boolean keepSession)
+            throws IOException {
+        try {
             Tls12Socket t = new Tls12Socket(s, s.getInputStream(), s.getOutputStream(), host, policy);
+            t.resume = resume != null && !resume.isTls13() && resume.sessionId != null && resume.sessionId.length > 0
+                    ? resume : null;
+            t.keepSession = keepSession;
             t.handshake();
             return t;
         } catch (IOException e) {
@@ -176,9 +206,25 @@ public final class Tls12Socket implements TlsConnection {
 
     @Override
     public String getSummary() {
-        return "TLS 1.2 " + suiteName.replace("TLS_", "") + " " + groupName + " " + signatureName
-                + (extendedMasterSecret ? " EMS" : "")
+        String exchange = (groupName + " " + signatureName).trim();
+        return "TLS 1.2 " + suiteName.replace("TLS_", "") + (exchange.length() > 0 ? " " + exchange : "")
+                + (extendedMasterSecret ? " EMS" : "") + (resumed ? " resumed" : "")
                 + (policy.isInsecure() ? " (certificate NOT verified)" : "");
+    }
+
+    @Override
+    public TlsSession session() {
+        return session;
+    }
+
+    @Override
+    public boolean wasResumed() {
+        return resumed;
+    }
+
+    @Override
+    public boolean closedCleanly() {
+        return closeNotifyReceived;
     }
 
     // ------------------------------------------------------------------ handshake
@@ -216,7 +262,7 @@ public final class Tls12Socket implements TlsConnection {
         TlsReader r = body(sh);
         int version = r.u16();
         byte[] serverRandom = r.bytes(32);
-        r.vec8(); // session id: resumption is not used
+        byte[] serverSessionId = r.vec8();
         int suite = r.u16();
         int compression = r.u8();
         Set<Integer> seen = new HashSet<Integer>();
@@ -255,6 +301,38 @@ public final class Tls12Socket implements TlsConnection {
         if (compression != 0) throw new TlsException(TlsException.ILLEGAL_PARAMETER, "server selected compression");
         suiteName = suite == ECDHE_ECDSA_AES_128_GCM_SHA256
                 ? "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256" : "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
+
+        if (resume != null && Arrays.equals(serverSessionId, resume.sessionId)) {
+            // The server took up the session: abbreviated handshake (RFC 5246 section 7.3).
+            if (suite != resume.cipherSuite) {
+                throw new TlsException(TlsException.ILLEGAL_PARAMETER, "resumed session changed its cipher suite");
+            }
+            if (extendedMasterSecret != resume.extendedMasterSecret) { // RFC 7627 section 5.3
+                throw new TlsException(TlsException.HANDSHAKE_FAILURE, "resumed session changed extended_master_secret");
+            }
+            byte[] master = resume.masterSecret.clone();
+            byte[] keyBlock = prf(master, "key expansion", cat(serverRandom, clientRandom), 40);
+            AesGcm clientAead = new AesGcm(Arrays.copyOfRange(keyBlock, 0, 16));
+            AesGcm serverAead = new AesGcm(Arrays.copyOfRange(keyBlock, 16, 32));
+            byte[] clientSalt = Arrays.copyOfRange(keyBlock, 32, 36);
+            byte[] serverSalt = Arrays.copyOfRange(keyBlock, 36, 40);
+            Arrays.fill(keyBlock, (byte) 0);
+
+            readServerFinished(master, serverAead, serverSalt);
+            writeAead = clientAead;
+            writeSalt = clientSalt;
+            writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, 0x0303);
+            byte[] clientFinished = TlsWriter.handshake(HT_FINISHED,
+                    prf(master, "client finished", sha256(transcript.toByteArray()), 12));
+            writeProtected(CT_HANDSHAKE, clientFinished, 0, clientFinished.length);
+            out.flush();
+            Arrays.fill(master, (byte) 0);
+            transcript.reset();
+            resumed = true;
+            if (keepSession) session = resume;
+            handshakeDone = true;
+            return;
+        }
 
         // Certificate
         byte[] certMsg = nextHandshakeMessage();
@@ -371,7 +449,21 @@ public final class Tls12Socket implements TlsConnection {
         writeProtected(CT_HANDSHAKE, clientFinished, 0, clientFinished.length);
         out.flush();
 
-        // Server ChangeCipherSpec, then Finished under the new keys.
+        readServerFinished(master, serverAead, serverSalt);
+        if (keepSession && serverSessionId.length > 0) {
+            session = new TlsSession(host, serverSessionId, master.clone(), suite, extendedMasterSecret);
+        }
+        Arrays.fill(master, (byte) 0);
+        transcript.reset();
+        handshakeDone = true;
+        if (!secureRenegotiation) {
+            // Legacy server; harmless for us because renegotiation is always refused.
+            signatureName = signatureName + " (no RI)";
+        }
+    }
+
+    /** Server ChangeCipherSpec, then its Finished under the new keys; the Finished joins the transcript. */
+    private void readServerFinished(byte[] master, AesGcm serverAead, byte[] serverSalt) throws Exception {
         if (handshakeBuffer.length != 0) throw unexpected("handshake data before ChangeCipherSpec");
         byte[][] rec = readRecord();
         if (rec == null) throw new EOFException("connection closed before server ChangeCipherSpec");
@@ -391,13 +483,7 @@ public final class Tls12Socket implements TlsConnection {
             throw new TlsException(TlsException.DECRYPT_ERROR, "server Finished does not verify");
         }
         if (handshakeBuffer.length != 0) throw unexpected("trailing handshake data after Finished");
-        Arrays.fill(master, (byte) 0);
-        transcript.reset();
-        handshakeDone = true;
-        if (!secureRenegotiation) {
-            // Legacy server; harmless for us because renegotiation is always refused.
-            signatureName = signatureName + " (no RI)";
-        }
+        transcript.write(fin);
     }
 
     private byte[] buildClientHello(byte[] random) {
@@ -416,7 +502,7 @@ public final class Tls12Socket implements TlsConnection {
         TlsWriter body = new TlsWriter()
                 .u16(0x0303)
                 .raw(random)
-                .vec8(new byte[0])
+                .vec8(resume != null ? resume.sessionId : new byte[0])
                 .vec16(new TlsWriter().u16(ECDHE_ECDSA_AES_128_GCM_SHA256).u16(ECDHE_RSA_AES_128_GCM_SHA256)
                         .u16(EMPTY_RENEGOTIATION_INFO_SCSV).toByteArray())
                 .vec8(new byte[] { 0 })
@@ -601,6 +687,7 @@ public final class Tls12Socket implements TlsConnection {
                     TlsException alert = alertReceived(rec[1]);
                     if (alert.alert == TlsException.CLOSE_NOTIFY) {
                         inputClosed = true;
+                        closeNotifyReceived = true;
                         return -1;
                     }
                     if (rec[1].length == 2 && rec[1][0] == 1) continue; // other warnings

@@ -25,8 +25,13 @@ import java.util.Set;
  *
  * Profile: TLS_AES_128_GCM_SHA256; key exchange X25519 (sent first) or secp256r1 (sent after a
  * HelloRetryRequest asks for it); server signatures ECDSA P-256/P-384 and RSA-PSS. Not
- * supported, and refused explicitly: PSK/resumption, 0-RTT, client certificates.
- * NewSessionTicket is read and discarded; KeyUpdate is honoured in both directions.
+ * supported, and refused explicitly: 0-RTT, client certificates. KeyUpdate is honoured in both
+ * directions.
+ *
+ * Resumption (RFC 8446 sections 2.2 and 4.2.11: a ticket's pre-shared key with a fresh
+ * (EC)DHE exchange, psk_dhe_ke) exists for one caller: the FTPS data connection, which must
+ * reuse the control connection's session. A connection keeps tickets only when it was opened
+ * asking for a {@link TlsSession}; otherwise NewSessionTicket is read and discarded.
  *
  * The handshake is linear code rather than a table: each step reads exactly the message
  * the protocol allows next, so any other message fails with unexpected_message.
@@ -53,8 +58,10 @@ public final class Tls13Socket implements TlsConnection {
     static final int EXT_SUPPORTED_GROUPS = 10;
     static final int EXT_SIGNATURE_ALGORITHMS = 13;
     static final int EXT_ALPN = 16;
+    static final int EXT_PRE_SHARED_KEY = 41;
     static final int EXT_SUPPORTED_VERSIONS = 43;
     static final int EXT_COOKIE = 44;
+    static final int EXT_PSK_KEY_EXCHANGE_MODES = 45;
     static final int EXT_SIGNATURE_ALGORITHMS_CERT = 50;
     static final int EXT_KEY_SHARE = 51;
 
@@ -146,6 +153,17 @@ public final class Tls13Socket implements TlsConnection {
     private String groupName = "";
     private String signatureName = "";
 
+    private TlsSession resume;
+    private boolean keepSession;
+    private volatile TlsSession session;
+    private byte[] resumptionMaster;
+    private boolean resumed;
+    private boolean closeNotifyReceived;
+    /** The ALPN protocol offered, or null for none (FTP has no use for one). */
+    private byte[] alpn = ALPN_HTTP11;
+    /** Tickets are kept for at most this long, whatever the server says (RFC 8446: at most 7 days). */
+    private static final long MAX_TICKET_LIFETIME_MS = 24L * 60 * 60 * 1000;
+
     // Test hooks, package-private: tests replay RFC 8448 with its exact ClientHello and key.
     int rsaMinBits = RsaVerifier.MIN_BITS;
     int keyUpdatesReceived;
@@ -221,7 +239,29 @@ public final class Tls13Socket implements TlsConnection {
             s.connect(new InetSocketAddress(host, port), timeoutMs);
             s.setSoTimeout(timeoutMs);
             s.setTcpNoDelay(true);
+        } catch (IOException e) {
+            closeQuietly(s);
+            throw e;
+        }
+        return over(s, host, policy, null, false, true);
+    }
+
+    /**
+     * A handshake on a socket that is already connected (FTPS: after AUTH TLS, or a data
+     * connection). The socket is closed when the handshake fails.
+     *
+     * @param resume      a TLS 1.3 session to resume, or null for a full handshake
+     * @param keepSession keep tickets so that {@link #session()} can be resumed later
+     * @param http        offer the "http/1.1" ALPN protocol (false: no ALPN at all)
+     */
+    public static Tls13Socket over(Socket s, String host, CertificatePolicy policy, TlsSession resume,
+                                   boolean keepSession, boolean http) throws IOException {
+        try {
             Tls13Socket t = new Tls13Socket(s, s.getInputStream(), s.getOutputStream(), host, policy);
+            t.resume = resume != null && resume.isTls13() && resume.psk != null
+                    && System.currentTimeMillis() - resume.receivedAtMillis < resume.lifetimeMillis ? resume : null;
+            t.keepSession = keepSession;
+            t.alpn = http ? ALPN_HTTP11 : null;
             t.handshake();
             return t;
         } catch (IOException e) {
@@ -255,8 +295,23 @@ public final class Tls13Socket implements TlsConnection {
 
     @Override
     public String getSummary() {
-        return "TLS 1.3 AES_128_GCM_SHA256 " + groupName + " " + signatureName
+        return "TLS 1.3 AES_128_GCM_SHA256 " + (groupName + " " + signatureName).trim() + (resumed ? " resumed" : "")
                 + (policy.isInsecure() ? " (certificate NOT verified)" : "");
+    }
+
+    @Override
+    public TlsSession session() {
+        return session;
+    }
+
+    @Override
+    public boolean wasResumed() {
+        return resumed;
+    }
+
+    @Override
+    public boolean closedCleanly() {
+        return closeNotifyReceived;
     }
 
     // ------------------------------------------------------------------ handshake
@@ -292,7 +347,7 @@ public final class Tls13Socket implements TlsConnection {
         byte[] x25519Private = x25519PrivateOverride != null ? x25519PrivateOverride : TlsRandom.bytes(32);
 
         byte[] clientHello = clientHelloOverride != null ? clientHelloOverride
-                : buildClientHello(random, sessionId, GROUP_X25519, X25519.publicKey(x25519Private), null);
+                : buildClientHello(random, sessionId, GROUP_X25519, X25519.publicKey(x25519Private), null, EMPTY);
         ClientHelloInfo offered = ClientHelloInfo.parse(clientHello);
         boolean compatMode = offered.sessionId.length > 0;
         boolean ccsSent = false;
@@ -331,7 +386,8 @@ public final class Tls13Socket implements TlsConnection {
             transcript.write(TlsWriter.handshake(HT_MESSAGE_HASH, ch1Hash));
             transcript.write(serverHello);
 
-            byte[] clientHello2 = buildClientHello(offered.random, offered.sessionId, group, share, sh.cookie);
+            byte[] clientHello2 = buildClientHello(offered.random, offered.sessionId, group, share, sh.cookie,
+                    transcript.toByteArray());
             if (compatMode) {
                 writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, VERSION_TLS12);
                 ccsSent = true;
@@ -351,6 +407,9 @@ public final class Tls13Socket implements TlsConnection {
             }
             if (sh2.cipherSuite != sh.cipherSuite) {
                 throw new TlsException(TlsException.ILLEGAL_PARAMETER, "cipher suite changed after HelloRetryRequest");
+            }
+            if (sh.pskSelected) {
+                throw new TlsException(TlsException.ILLEGAL_PARAMETER, "pre_shared_key in a HelloRetryRequest");
             }
             serverHello = serverHello2;
             sh = sh2;
@@ -385,7 +444,9 @@ public final class Tls13Socket implements TlsConnection {
         // Key schedule up to the handshake traffic secrets.
         byte[] zeros = new byte[Hkdf.HASH_LEN];
         byte[] emptyHash = sha256(EMPTY);
-        byte[] early = Hkdf.extract(zeros, zeros);
+        // With an accepted ticket the pre-shared key enters here; the (EC)DHE secret still follows.
+        resumed = sh.pskSelected;
+        byte[] early = Hkdf.extract(zeros, resumed ? resume.psk : zeros);
         byte[] handshakeSecret = Hkdf.extract(Hkdf.deriveSecret(early, "derived", emptyHash), shared);
         Arrays.fill(shared, (byte) 0);
         byte[] helloHash = transcriptHash();
@@ -404,6 +465,57 @@ public final class Tls13Socket implements TlsConnection {
         parseEncryptedExtensions(ee, offered);
         transcript.write(ee);
 
+        if (!resumed) {
+            readServerCertificate(offered);
+        } else {
+            signatureName = "";
+        }
+
+        // Server Finished
+        byte[] fin = nextHandshakeMessage();
+        if (type(fin) != HT_FINISHED) {
+            throw unexpected(resumed ? "expected Finished in a resumed handshake" : "expected Finished");
+        }
+        byte[] expected = Hkdf.hmac(Hkdf.expandLabel(serverHs, "finished", EMPTY, Hkdf.HASH_LEN), transcriptHash());
+        TlsReader fr = body(fin);
+        byte[] verifyData = fr.bytes(Hkdf.HASH_LEN);
+        fr.expectEnd();
+        if (!MessageDigest.isEqual(expected, verifyData)) {
+            throw new TlsException(TlsException.DECRYPT_ERROR, "server Finished does not verify");
+        }
+        transcript.write(fin);
+
+        byte[] serverFinishedHash = transcriptHash();
+        byte[] clientAp = Hkdf.deriveSecret(master, "c ap traffic", serverFinishedHash);
+        byte[] serverAp = Hkdf.deriveSecret(master, "s ap traffic", serverFinishedHash);
+        requireKeyChangeBoundary();
+        readProtection = new Protection(serverAp);
+
+        // Client flight: [compat CCS] Finished under the client handshake key.
+        if (compatMode && !ccsSent) {
+            writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, VERSION_TLS12);
+        }
+        writeProtection = new Protection(clientHs);
+        byte[] clientVerify = Hkdf.hmac(Hkdf.expandLabel(clientHs, "finished", EMPTY, Hkdf.HASH_LEN),
+                serverFinishedHash);
+        byte[] clientFinished = TlsWriter.handshake(HT_FINISHED, clientVerify);
+        writeProtected(CT_HANDSHAKE, clientFinished);
+        out.flush();
+        writeProtection = new Protection(clientAp);
+
+        if (keepSession) {
+            // Tickets arrive later; each one's key comes from this secret (RFC 8446 section 7.1).
+            transcript.write(clientFinished);
+            resumptionMaster = Hkdf.deriveSecret(master, "res master", transcriptHash());
+        }
+        Arrays.fill(handshakeSecret, (byte) 0);
+        Arrays.fill(master, (byte) 0);
+        transcript.reset();
+        handshakeDone = true;
+    }
+
+    /** Certificate and CertificateVerify of a full handshake; both join the transcript. */
+    private void readServerCertificate(ClientHelloInfo offered) throws Exception {
         // Certificate (a CertificateRequest here means the server wants client authentication)
         byte[] certMsg = nextHandshakeMessage();
         if (type(certMsg) == HT_CERTIFICATE_REQUEST) {
@@ -448,42 +560,6 @@ public final class Tls13Socket implements TlsConnection {
         }
         signatureName = SignatureSchemes.name(scheme);
         transcript.write(cv);
-
-        // Server Finished
-        byte[] fin = nextHandshakeMessage();
-        if (type(fin) != HT_FINISHED) {
-            throw unexpected("expected Finished");
-        }
-        byte[] expected = Hkdf.hmac(Hkdf.expandLabel(serverHs, "finished", EMPTY, Hkdf.HASH_LEN), transcriptHash());
-        TlsReader fr = body(fin);
-        byte[] verifyData = fr.bytes(Hkdf.HASH_LEN);
-        fr.expectEnd();
-        if (!MessageDigest.isEqual(expected, verifyData)) {
-            throw new TlsException(TlsException.DECRYPT_ERROR, "server Finished does not verify");
-        }
-        transcript.write(fin);
-
-        byte[] serverFinishedHash = transcriptHash();
-        byte[] clientAp = Hkdf.deriveSecret(master, "c ap traffic", serverFinishedHash);
-        byte[] serverAp = Hkdf.deriveSecret(master, "s ap traffic", serverFinishedHash);
-        requireKeyChangeBoundary();
-        readProtection = new Protection(serverAp);
-
-        // Client flight: [compat CCS] Finished under the client handshake key.
-        if (compatMode && !ccsSent) {
-            writePlain(CT_CHANGE_CIPHER_SPEC, new byte[] { 1 }, VERSION_TLS12);
-        }
-        writeProtection = new Protection(clientHs);
-        byte[] clientVerify = Hkdf.hmac(Hkdf.expandLabel(clientHs, "finished", EMPTY, Hkdf.HASH_LEN),
-                serverFinishedHash);
-        writeProtected(CT_HANDSHAKE, TlsWriter.handshake(HT_FINISHED, clientVerify));
-        out.flush();
-        writeProtection = new Protection(clientAp);
-
-        Arrays.fill(handshakeSecret, (byte) 0);
-        Arrays.fill(master, (byte) 0);
-        transcript.reset();
-        handshakeDone = true;
     }
 
     /** Reads the first server message, turning "server does not do TLS 1.3" into TlsVersionException. */
@@ -510,6 +586,15 @@ public final class Tls13Socket implements TlsConnection {
     }
 
     byte[] buildClientHello(byte[] random, byte[] sessionId, int shareGroup, byte[] share, byte[] cookie) {
+        return buildClientHello(random, sessionId, shareGroup, share, cookie, EMPTY);
+    }
+
+    /**
+     * @param transcriptBefore what precedes this ClientHello in the transcript (empty, or the
+     *                         message hash and HelloRetryRequest); the ticket's binder covers it
+     */
+    byte[] buildClientHello(byte[] random, byte[] sessionId, int shareGroup, byte[] share, byte[] cookie,
+                            byte[] transcriptBefore) {
         TlsWriter ext = new TlsWriter();
         if (!HostnameChecker.isIpLiteral(host)) {
             byte[] name = Hkdf.ascii(host);
@@ -521,7 +606,9 @@ public final class Tls13Socket implements TlsConnection {
                         .toByteArray());
         ext.extension(EXT_SIGNATURE_ALGORITHMS, schemeList(SignatureSchemes.TLS13_HANDSHAKE));
         ext.extension(EXT_SIGNATURE_ALGORITHMS_CERT, schemeList(SignatureSchemes.CERTIFICATES));
-        ext.extension(EXT_ALPN, new TlsWriter().vec16(new TlsWriter().vec8(ALPN_HTTP11).toByteArray()).toByteArray());
+        if (alpn != null) {
+            ext.extension(EXT_ALPN, new TlsWriter().vec16(new TlsWriter().vec8(alpn).toByteArray()).toByteArray());
+        }
         ext.extension(EXT_SUPPORTED_VERSIONS, new TlsWriter().vec8(new TlsWriter().u16(VERSION_TLS13).toByteArray())
                 .toByteArray());
         if (cookie != null) {
@@ -529,6 +616,19 @@ public final class Tls13Socket implements TlsConnection {
         }
         ext.extension(EXT_KEY_SHARE,
                 new TlsWriter().vec16(new TlsWriter().u16(shareGroup).vec16(share).toByteArray()).toByteArray());
+        if (resume != null || keepSession) {
+            // Without this a server sends no tickets at all (RFC 8446 section 4.2.9).
+            ext.extension(EXT_PSK_KEY_EXCHANGE_MODES, new byte[] { 1, 1 }); // psk_dhe_ke only
+        }
+        if (resume != null) {
+            // pre_shared_key must be last; its binder is filled in below, over everything before it.
+            long age = System.currentTimeMillis() - resume.receivedAtMillis;
+            long obfuscated = (age + resume.ticketAgeAdd) & 0xffffffffL;
+            byte[] identity = new TlsWriter().vec16(resume.ticket)
+                    .u16((int) (obfuscated >>> 16)).u16((int) (obfuscated & 0xffff)).toByteArray();
+            ext.extension(EXT_PRE_SHARED_KEY, new TlsWriter().vec16(identity)
+                    .vec16(new TlsWriter().vec8(new byte[Hkdf.HASH_LEN]).toByteArray()).toByteArray());
+        }
 
         TlsWriter body = new TlsWriter()
                 .u16(VERSION_TLS12)
@@ -537,7 +637,23 @@ public final class Tls13Socket implements TlsConnection {
                 .vec16(new TlsWriter().u16(TLS_AES_128_GCM_SHA256).toByteArray())
                 .vec8(new byte[] { 0 })
                 .vec16(ext.toByteArray());
-        return TlsWriter.handshake(HT_CLIENT_HELLO, body.toByteArray());
+        byte[] hello = TlsWriter.handshake(HT_CLIENT_HELLO, body.toByteArray());
+        if (resume != null) {
+            try {
+                // RFC 8446 section 4.2.11.2: HMAC over the transcript up to, not including, the binders list.
+                int truncated = hello.length - (2 + 1 + Hkdf.HASH_LEN);
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                md.update(transcriptBefore);
+                md.update(hello, 0, truncated);
+                byte[] early = Hkdf.extract(new byte[Hkdf.HASH_LEN], resume.psk);
+                byte[] binderKey = Hkdf.deriveSecret(early, "res binder", sha256(EMPTY));
+                byte[] binder = Hkdf.hmac(Hkdf.expandLabel(binderKey, "finished", EMPTY, Hkdf.HASH_LEN), md.digest());
+                System.arraycopy(binder, 0, hello, hello.length - Hkdf.HASH_LEN, Hkdf.HASH_LEN);
+            } catch (Exception e) {
+                throw new IllegalStateException("cannot compute the ticket binder", e);
+            }
+        }
+        return hello;
     }
 
     private static byte[] schemeList(int[] schemes) {
@@ -575,7 +691,7 @@ public final class Tls13Socket implements TlsConnection {
                 a.expectEnd();
                 byte[] proto = list.vec8();
                 list.expectEnd();
-                if (!Arrays.equals(proto, ALPN_HTTP11)) {
+                if (alpn == null || !Arrays.equals(proto, alpn)) {
                     throw new TlsException(TlsException.NO_APPLICATION_PROTOCOL, "server selected an unexpected ALPN protocol");
                 }
             }
@@ -709,6 +825,8 @@ public final class Tls13Socket implements TlsConnection {
         int keyShareGroup = -1;
         byte[] keyShare;
         byte[] cookie;
+        /** The server accepted the offered ticket (pre_shared_key, selected identity 0). */
+        boolean pskSelected;
 
         static ServerHelloInfo parse(byte[] msg, ClientHelloInfo offered) throws TlsException {
             ServerHelloInfo info = new ServerHelloInfo();
@@ -758,12 +876,23 @@ public final class Tls13Socket implements TlsConnection {
             info.helloRetry = Arrays.equals(random, HRR_RANDOM);
             for (Integer type : exts.keySet()) {
                 boolean allowed = type == EXT_SUPPORTED_VERSIONS || type == EXT_KEY_SHARE
-                        || (info.helloRetry && type == EXT_COOKIE);
+                        || (info.helloRetry && type == EXT_COOKIE)
+                        || (!info.helloRetry && type == EXT_PRE_SHARED_KEY && offered.extensions.contains(type));
                 if (!allowed) {
                     throw new TlsException(offered.extensions.contains(type) || type == EXT_COOKIE
                             ? TlsException.ILLEGAL_PARAMETER : TlsException.UNSUPPORTED_EXTENSION,
                             "extension " + type + " not allowed in ServerHello");
                 }
+            }
+            byte[] psk = exts.get(EXT_PRE_SHARED_KEY);
+            if (psk != null && !info.helloRetry) {
+                TlsReader p = new TlsReader(psk);
+                int selected = p.u16();
+                p.expectEnd();
+                if (selected != 0) {
+                    throw new TlsException(TlsException.ILLEGAL_PARAMETER, "server selected a ticket that was not offered");
+                }
+                info.pskSelected = true;
             }
             byte[] ks = exts.get(EXT_KEY_SHARE);
             if (info.helloRetry) {
@@ -1027,6 +1156,7 @@ public final class Tls13Socket implements TlsConnection {
                     TlsException alert = alertReceived(rec.data);
                     if (alert.alert == TlsException.CLOSE_NOTIFY) {
                         inputClosed = true;
+                        closeNotifyReceived = true;
                         return -1;
                     }
                     if (alert.alert == 90) {
@@ -1053,7 +1183,8 @@ public final class Tls13Socket implements TlsConnection {
         while ((msg = takeHandshakeMessage()) != null) {
             int t = type(msg);
             if (t == HT_NEW_SESSION_TICKET) {
-                continue; // resumption is not used
+                if (resumptionMaster != null) rememberTicket(msg);
+                continue;
             }
             if (t != HT_KEY_UPDATE) {
                 throw unexpected("unexpected post-handshake message " + t);
@@ -1074,6 +1205,22 @@ public final class Tls13Socket implements TlsConnection {
                 }
             }
         }
+    }
+
+    /** Keeps the newest ticket as this connection's resumable session (RFC 8446 section 4.6.1). */
+    private void rememberTicket(byte[] msg) throws Exception {
+        TlsReader r = body(msg);
+        long lifetime = ((long) r.u16() << 16) | r.u16();
+        long ageAdd = ((long) r.u16() << 16) | r.u16();
+        byte[] nonce = r.vec8();
+        byte[] ticket = r.vec16();
+        r.vec16(); // extensions (early data is not used)
+        r.expectEnd();
+        if (ticket.length == 0) throw new TlsException(TlsException.DECODE_ERROR, "empty session ticket");
+        if (lifetime == 0) return; // the server asks us not to use it
+        byte[] psk = Hkdf.expandLabel(resumptionMaster, "resumption", nonce, Hkdf.HASH_LEN);
+        session = new TlsSession(host, ticket, psk, ageAdd, System.currentTimeMillis(),
+                Math.min(lifetime * 1000, MAX_TICKET_LIFETIME_MS));
     }
 
     /** Caller holds writeLock. */

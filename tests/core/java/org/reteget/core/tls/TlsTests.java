@@ -174,7 +174,8 @@ public final class TlsTests {
         String[] names = {
             "hkdf", "x25519", "keySchedule", "gcmCrossCheck", "ecdsaCrossCheck", "rsaCrossCheck",
             "p256Ecdh", "hostname", "serverHelloChecks", "rfc8448Replay", "rfc8448Tampering",
-            "rfc8448SplitRecords", "rfc8448PlaintextAlertRefused", "loopbackInterop", "pathValidation", "tls12UnderAttack"
+            "rfc8448SplitRecords", "rfc8448PlaintextAlertRefused", "loopbackInterop", "pathValidation", "tls12UnderAttack",
+            "resumption"
         };
         for (String n : names) {
             try {
@@ -186,6 +187,10 @@ public final class TlsTests {
                 fail(n + " could not run: " + e);
             }
         }
+    }
+
+    static void resumption() throws Exception {
+        TlsResumeTests.run();
     }
 
     // ------------------------------------------------------------------ assertions
