@@ -1,4 +1,4 @@
-[한국어](README.ko.md) | **English** — **ReteGet v0.4.1** — [APK(Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.4.1/reteget-0.4.1.apk)
+[한국어](README.ko.md) | **English** — **ReteGet v0.5.0** — [APK(Android 2.3+)](https://github.com/rubidus-api/reteget_apk/releases/download/v0.5.0/reteget-0.5.0.apk)
 
 # ReteGet
 
