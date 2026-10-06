@@ -39,6 +39,7 @@ import org.reteget.core.PresetItem;
 import org.reteget.core.SettingsBundle;
 import org.reteget.core.TlsHelper;
 import org.reteget.core.UrlTemplate;
+import org.reteget.core.ssh.SshConfig;
 
 import java.io.File;
 import java.io.InputStream;
@@ -88,6 +89,13 @@ public class MainActivity extends Activity {
 
     // Bottom presets section
     private Button btnAddPreset;
+    private SshUi sshUi;
+    /** The key chosen for the sftp:// address in the URL bar; empty for password only. */
+    private String selectedSshKey = "";
+    private View layoutSshKey;
+    private Button btnSshKey;
+    /** Questions (entry id and question) already put to the user in this run, so each pops up once. */
+    private static final java.util.Set<String> sAsked = new java.util.HashSet<String>();
     private TextView txtNoPresets;
     private LinearLayout layoutPresetsList;
     private LinearLayout layoutPresetBatch;
@@ -245,6 +253,31 @@ public class MainActivity extends Activity {
         });
 
         btnAddPreset = (Button) findViewById(R.id.btn_add_preset);
+        SshUi.init(this);
+        sshUi = new SshUi(this);
+        layoutSshKey = findViewById(R.id.layout_ssh_key);
+        btnSshKey = (Button) findViewById(R.id.btn_ssh_key);
+        btnSshKey.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sshUi.pickKey(new SshUi.Picked() {
+                    public void onPicked(String fingerprint) {
+                        selectedSshKey = fingerprint;
+                        updateSshKeyRow();
+                    }
+                });
+            }
+        });
+        findViewById(R.id.btn_ssh_keys).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sshUi.manageKeys(new Runnable() {
+                    public void run() {
+                        updateSshKeyRow();
+                    }
+                });
+            }
+        });
         txtNoPresets = (TextView) findViewById(R.id.txt_no_presets);
         layoutPresetsList = (LinearLayout) findViewById(R.id.layout_presets_list);
         layoutPresetBatch = (LinearLayout) findViewById(R.id.layout_preset_batch);
@@ -494,7 +527,19 @@ public class MainActivity extends Activity {
         btnPresetSelectAll.setText(all ? R.string.btn_select_none : R.string.btn_select_all);
     }
 
+    private static boolean isSftp(String url) {
+        return url != null && url.trim().toLowerCase(java.util.Locale.US).startsWith("sftp://");
+    }
+
+    /** The key chooser under the URL bar, shown only for an sftp:// address. */
+    private void updateSshKeyRow() {
+        boolean sftp = isSftp(editUrl.getText().toString());
+        layoutSshKey.setVisibility(sftp ? View.VISIBLE : View.GONE);
+        if (sftp) btnSshKey.setText(sshUi.keyLabel(selectedSshKey));
+    }
+
     private void selectAndLoadPreset(PresetItem item, boolean showToast) {
+        selectedSshKey = item.sshKey == null ? "" : item.sshKey;
         editUrl.setText(item.url);
         editUrl.setSelection(item.url.length());
         if (item.lastVersion != null && !item.lastVersion.isEmpty()) {
@@ -550,6 +595,28 @@ public class MainActivity extends Activity {
         inputIndex.setText(item.index != null ? item.index : "");
         layout.addView(inputIndex);
 
+        TextView lblKey = new TextView(this);
+        lblKey.setText(R.string.ssh_preset_key_label);
+        lblKey.setTextColor(DIALOG_LABEL);
+        lblKey.setPadding(0, pad / 2, 0, 0);
+        layout.addView(lblKey);
+
+        final String[] presetKey = { item.sshKey == null ? "" : item.sshKey };
+        final Button btnKey = new Button(this);
+        btnKey.setText(sshUi.keyLabel(presetKey[0]));
+        btnKey.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sshUi.pickKey(new SshUi.Picked() {
+                    public void onPicked(String fingerprint) {
+                        presetKey[0] = fingerprint;
+                        btnKey.setText(sshUi.keyLabel(fingerprint));
+                    }
+                });
+            }
+        });
+        layout.addView(btnKey);
+
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_edit_preset_title)
                 .setView(layout)
@@ -562,6 +629,7 @@ public class MainActivity extends Activity {
                             item.name = newName;
                             item.url = newUrl;
                             item.index = inputIndex.getText().toString().trim();
+                            item.sshKey = isSftp(newUrl) ? presetKey[0] : "";
                             savePresets();
                             renderPresets();
                             Toast.makeText(MainActivity.this, R.string.toast_preset_updated, Toast.LENGTH_SHORT).show();
@@ -619,6 +687,7 @@ public class MainActivity extends Activity {
 
     private void saveNewPreset(String name, String url) {
         PresetItem candidate = new PresetItem(name, url);
+        if (isSftp(url)) candidate.sshKey = selectedSshKey;
         if (presetList.contains(candidate)) {
             Toast.makeText(MainActivity.this, R.string.toast_preset_exists, Toast.LENGTH_SHORT).show();
             return;
@@ -704,6 +773,7 @@ public class MainActivity extends Activity {
         b.builtInTls = chkPureTls.isChecked();
         b.autoUpgrade = chkAutoUpgrade.isChecked();
         b.presets.addAll(presetList);
+        b.knownHosts = SshConfig.knownHosts().export();
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         for (Map.Entry<String, ?> e : sp.getAll().entrySet()) {
             if (e.getKey().startsWith("sig_fp_") && e.getValue() instanceof String) {
@@ -865,6 +935,8 @@ public class MainActivity extends Activity {
             }
         }
         ed.commit();
+        // The same rule for SSH host keys: only hosts this phone has no record of are added.
+        SshConfig.knownHosts().importMissing(b.knownHosts);
         Toast.makeText(this, R.string.settings_imported, Toast.LENGTH_SHORT).show();
     }
 
@@ -906,6 +978,7 @@ public class MainActivity extends Activity {
     }
 
     private void handleUrlChanged(String text) {
+        updateSshKeyRow();
         currentTemplate = new UrlTemplate(text);
         List<String> placeholders = currentTemplate.getPlaceholders();
 
@@ -1100,7 +1173,7 @@ public class MainActivity extends Activity {
         layoutChecksumResult.setVisibility(View.VISIBLE);
     }
 
-    private void copyToClipboard(String text) {
+    void copyToClipboard(String text) {
         if (Build.VERSION.SDK_INT >= 11) {
             android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm != null) {
@@ -1142,8 +1215,9 @@ public class MainActivity extends Activity {
         }
 
         String lower = url.toLowerCase();
-        if (!lower.startsWith("http://") && !lower.startsWith("https://") && !lower.startsWith("ftp://")) {
-            Toast.makeText(this, "URL must start with http://, https://, or ftp://", Toast.LENGTH_LONG).show();
+        if (!lower.startsWith("http://") && !lower.startsWith("https://") && !lower.startsWith("ftp://")
+                && !lower.startsWith("sftp://")) {
+            Toast.makeText(this, "URL must start with http://, https://, ftp://, or sftp://", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -1158,7 +1232,8 @@ public class MainActivity extends Activity {
             version = v1.getText().toString().trim();
         }
         sQueue.enqueue(url, destDir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
-                editExpectedChecksum.getText().toString().trim(), template, version);
+                editExpectedChecksum.getText().toString().trim(), template, version,
+                isSftp(url) ? selectedSshKey : null);
         Toast.makeText(this, R.string.queue_added, Toast.LENGTH_SHORT).show();
         scrollView.smoothScrollTo(0, 0);
     }
@@ -1249,7 +1324,8 @@ public class MainActivity extends Activity {
             }
         }
         sQueue.enqueue(m.url, chooseDownloadDir(), chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
-                editExpectedChecksum.getText().toString().trim(), item.url, m.version);
+                editExpectedChecksum.getText().toString().trim(), item.url, m.version,
+                isSftp(m.url) ? item.sshKey : null);
         Toast.makeText(this, getString(R.string.latest_found, m.url.substring(m.url.lastIndexOf('/') + 1)),
                 Toast.LENGTH_LONG).show();
     }
@@ -1291,6 +1367,7 @@ public class MainActivity extends Activity {
                         if (task == null || !updateQueueRow(task)) {
                             renderQueue();
                         }
+                        askIfWaiting(task);
                     }
                 });
             }
@@ -1513,6 +1590,22 @@ public class MainActivity extends Activity {
         return sb;
     }
 
+    /** Puts the entry's question (host key, passphrase) to the user; the download goes on after the answer. */
+    private void answerQuestion(final DownloadTask t) {
+        sshUi.answer(t, new Runnable() {
+            public void run() {
+                sQueue.retry(t.id);
+            }
+        });
+    }
+
+    /** Asks at once when an entry starts waiting while the app is in front; otherwise its button asks later. */
+    private void askIfWaiting(DownloadTask t) {
+        if (t == null || t.state != DownloadTask.State.FAILED || t.ask == null || !hasWindowFocus() || isFinishing()) return;
+        if (!sAsked.add(t.id + "|" + t.ask)) return;
+        answerQuestion(t);
+    }
+
     private View buildQueueRow(final DownloadTask t) {
         View row = LayoutInflater.from(this).inflate(R.layout.item_queue, layoutQueueList, false);
         CheckBox chk = (CheckBox) row.findViewById(R.id.chk_queue_select);
@@ -1535,6 +1628,11 @@ public class MainActivity extends Activity {
                 break;
             case FAILED:
             case CANCELLED:
+                if (t.state == DownloadTask.State.FAILED && sshUi.answerLabel(t) != 0) {
+                    addQueueButton(buttons, sshUi.answerLabel(t), false, new Runnable() {
+                        public void run() { answerQuestion(t); }
+                    });
+                }
                 addQueueButton(buttons, R.string.queue_retry, false, new Runnable() {
                     public void run() { sQueue.retry(t.id); }
                 });
@@ -1646,6 +1744,11 @@ public class MainActivity extends Activity {
                 appendRunNotes(sb, t);
                 break;
             case FAILED:
+                String waiting = sshUi.waitingText(t);
+                if (waiting != null) {
+                    sb.append(waiting);
+                    break;
+                }
                 sb.append(getString(R.string.queue_failed)).append(": ").append(
                         DownloadQueue.INTERRUPTED.equals(t.error) ? getString(R.string.queue_interrupted) : t.error);
                 java.io.File part = t.partFile();

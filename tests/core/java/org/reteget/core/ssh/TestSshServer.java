@@ -96,7 +96,25 @@ public final class TestSshServer implements Runnable {
     private final SecureRandom random = new SecureRandom();
 
     public TestSshServer() throws IOException {
-        ss = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
+        this(0);
+    }
+
+    /** On a fixed port, for running it by hand beside an emulator. */
+    public TestSshServer(int port) throws IOException {
+        ss = new ServerSocket(port, 50, InetAddress.getByName("127.0.0.1"));
+    }
+
+    /** TestSshServer <port> <password> <file to serve as /pub/NAME>...: user "user", runs until killed. */
+    public static void main(String[] args) throws Exception {
+        TestSshServer s = new TestSshServer(Integer.parseInt(args[0]));
+        s.password = args[1];
+        for (int i = 2; i < args.length; i++) {
+            java.io.File f = new java.io.File(args[i]);
+            s.files.put("/pub/" + f.getName(), java.nio.file.Files.readAllBytes(f.toPath()));
+        }
+        s.start();
+        System.out.println("listening on 127.0.0.1:" + s.port() + ", host key " + SshHostKey.fingerprint(s.hostKeyBlob()));
+        while (true) Thread.sleep(60000);
     }
 
     public TestSshServer start() throws Exception {

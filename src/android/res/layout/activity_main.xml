@@ -122,6 +122,33 @@
             android:textSize="13sp"
             android:layout_marginBottom="8dp" />
 
+        <!-- sftp:// only: the key to log in with -->
+        <LinearLayout
+            android:id="@+id/layout_ssh_key"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ssh_key_label"
+                android:textSize="13sp"
+                android:textColor="#333333" />
+
+            <Button
+                android:id="@+id/btn_ssh_key"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="6dp"
+                android:singleLine="true"
+                android:text="@string/ssh_key_none" />
+        </LinearLayout>
+
         <!-- Container for dynamically added template variable fields ({1}, {2}, etc.) -->
         <LinearLayout
             android:id="@+id/layout_variables"
@@ -413,6 +440,13 @@
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="4dp"
                     android:text="@string/btn_export" />
+
+                <Button
+                    android:id="@+id/btn_ssh_keys"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="4dp"
+                    android:text="@string/ssh_keys_button" />
             </LinearLayout>
 
             <TextView

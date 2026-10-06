@@ -18,6 +18,8 @@ public class PresetItem {
      * {@link #url} is the pattern the addresses on that page must fit. Empty when unused.
      */
     public String index = "";
+    /** sftp://: the fingerprint of the user's key to log in with; empty for password only. */
+    public String sshKey = "";
     public String lastFileName;
     public long lastFileSize = -1;
     public String lastVersion;
@@ -150,6 +152,9 @@ public class PresetItem {
         if (hasIndex()) {
             sb.append(",\"index\":").append(escapeJson(index.trim()));
         }
+        if (sshKey != null && sshKey.length() > 0) {
+            sb.append(",\"sshkey\":").append(escapeJson(sshKey));
+        }
         if (lastFileName != null && !lastFileName.trim().isEmpty()) {
             sb.append(",\"filename\":").append(escapeJson(lastFileName.trim()));
         }
@@ -191,6 +196,8 @@ public class PresetItem {
         if (item.name == null) item.name = "";
         item.index = extractJsonString(trimmed, "index");
         if (item.index == null) item.index = "";
+        item.sshKey = extractJsonString(trimmed, "sshkey");
+        if (item.sshKey == null) item.sshKey = "";
         item.lastFileName = extractJsonString(trimmed, "filename");
         item.lastVersion = extractJsonString(trimmed, "version");
         item.lastSha256 = extractJsonString(trimmed, "sha256");

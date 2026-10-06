@@ -70,6 +70,13 @@ public final class KnownHosts {
         save();
     }
 
+    /** Records the key the user was asked about (an unknown or changed host key). */
+    public void trust(SshPromptException confirmed) throws IOException {
+        byte[] blob = confirmed.blobBase64 == null ? null : SshBase64.decode(confirmed.blobBase64);
+        if (confirmed.hostPort == null || blob == null) throw new SshException("Not a host key question");
+        trust(confirmed.hostPort, blob);
+    }
+
     public synchronized void remove(String hostPort) {
         for (int i = entries.size() - 1; i >= 0; i--) {
             if (entries.get(i).hostPort.equals(hostPort)) entries.remove(i);

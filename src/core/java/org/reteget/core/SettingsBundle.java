@@ -55,6 +55,11 @@ public final class SettingsBundle {
     public final List<PresetItem> presets = new ArrayList<PresetItem>();
     /** package name -> { sha256 fingerprint, author } */
     public final Map<String, String[]> signers = new LinkedHashMap<String, String[]>();
+    /**
+     * Accepted SSH host keys, one "host:port type base64-key first-seen" line each (the form
+     * {@code KnownHosts} exports and imports). Host keys are public; private keys never travel.
+     */
+    public String knownHosts = "";
     /** One sentence per line that was skipped while reading; empty when all was understood. */
     public final List<String> complaints = new ArrayList<String>();
 
@@ -82,6 +87,7 @@ public final class SettingsBundle {
             // A password typed into a URL stays on this phone; the user name travels.
             text(out, "url", HttpAuth.stripPasswords(p.url));
             text(out, "index", HttpAuth.stripPasswords(p.index));
+            text(out, "key", p.sshKey); // the fingerprint of the SSH key, not the key
             text(out, "file", p.lastFileName);
             if (p.lastFileSize >= 0) out.append("size = ").append(p.lastFileSize).append('\n');
             text(out, "version", p.lastVersion);
@@ -96,6 +102,16 @@ public final class SettingsBundle {
             text(out, "package", e.getKey());
             text(out, "sha256", e.getValue()[0]);
             text(out, "author", e.getValue()[1]);
+        }
+        n = 0;
+        for (String line : knownHosts.split("\n")) {
+            String[] f = line.trim().split(" ");
+            if (f.length < 3) continue;
+            out.append("\n[host-").append(++n).append("]\n");
+            text(out, "host", f[0]);
+            text(out, "type", f[1]);
+            text(out, "key", f[2]);
+            if (f.length > 3) out.append("seen = ").append(number(f[3], 0)).append('\n');
         }
         return out.toString();
     }
@@ -159,6 +175,8 @@ public final class SettingsBundle {
                     recordKind = "preset";
                 } else if (section.startsWith("signer")) {
                     recordKind = "signer";
+                } else if (section.startsWith("host")) {
+                    recordKind = "host";
                 } else {
                     recordKind = null;
                 }
@@ -201,7 +219,7 @@ public final class SettingsBundle {
             }
         }
         b.finishRecord(recordKind, record);
-        if (!sawAnything || (!text.startsWith("# reteget") && b.presets.isEmpty() && b.signers.isEmpty()
+        if (!sawAnything || (!text.startsWith("# reteget") && b.presets.isEmpty() && b.signers.isEmpty() && b.knownHosts.length() == 0
                 && b.builtInTls == null && b.autoUpgrade == null)) {
             throw new IllegalArgumentException("not a ReteGet settings file");
         }
@@ -220,7 +238,18 @@ public final class SettingsBundle {
                     number(r.get("size"), -1), r.get("version"), number(r.get("time"), 0),
                     r.get("sha256"), r.get("signer"), r.get("author"));
             p.index = orEmpty(r.get("index")).trim();
+            p.sshKey = orEmpty(r.get("key")).trim();
             if (!presets.contains(p)) presets.add(p);
+        } else if ("host".equals(kind)) {
+            String host = orEmpty(r.get("host")).trim();
+            String type = orEmpty(r.get("type")).trim();
+            String key = orEmpty(r.get("key")).trim();
+            if (host.length() == 0 || type.length() == 0 || key.length() == 0
+                    || host.indexOf(' ') >= 0 || type.indexOf(' ') >= 0 || key.indexOf(' ') >= 0) {
+                complaints.add("a host without host, type or key was skipped");
+                return;
+            }
+            knownHosts += host + " " + type + " " + key + " " + number(r.get("seen"), 0) + "\n";
         } else {
             String pkg = r.get("package");
             String fp = r.get("sha256");
@@ -234,7 +263,8 @@ public final class SettingsBundle {
 
     private static boolean knownKey(String kind, String key) {
         String[] keys = "preset".equals(kind)
-                ? new String[] { "name", "url", "index", "file", "size", "version", "time", "sha256", "signer", "author" }
+                ? new String[] { "name", "url", "index", "key", "file", "size", "version", "time", "sha256", "signer", "author" }
+                : "host".equals(kind) ? new String[] { "host", "type", "key", "seen" }
                 : new String[] { "package", "sha256", "author" };
         for (String k : keys) {
             if (k.equals(key)) return true;
