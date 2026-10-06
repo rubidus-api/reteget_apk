@@ -170,6 +170,47 @@ public class MainActivity extends Activity {
         return dir;
     }
 
+    private static final String STORAGE_PERMISSION = "android.permission.WRITE_EXTERNAL_STORAGE";
+    private static final int REQUEST_STORAGE = 7001;
+    private Runnable afterStoragePermission;
+    /** The system's question is put once per run of the app; after "deny" downloads go to app storage. */
+    private static boolean sStorageAsked;
+
+    /**
+     * Runs {@code action} once the Download folder can be written. On Android 6 and newer the
+     * storage permission is a question to the user, asked here at the first download and not at
+     * start-up; whatever the answer, the download goes on (a refusal means the app's own storage).
+     * The app is compiled against API 19, so the API 23 calls go through reflection.
+     */
+    private void withStoragePermission(Runnable action) {
+        if (Build.VERSION.SDK_INT < 23 || sStorageAsked) {
+            action.run();
+            return;
+        }
+        try {
+            Object granted = Context.class.getMethod("checkSelfPermission", String.class).invoke(this, STORAGE_PERMISSION);
+            if (Integer.valueOf(PackageManager.PERMISSION_GRANTED).equals(granted)) {
+                action.run();
+                return;
+            }
+            sStorageAsked = true;
+            afterStoragePermission = action;
+            Activity.class.getMethod("requestPermissions", String[].class, int.class)
+                    .invoke(this, new String[] { STORAGE_PERMISSION }, Integer.valueOf(REQUEST_STORAGE));
+        } catch (Exception e) {
+            afterStoragePermission = null;
+            action.run();
+        }
+    }
+
+    /** Called by Android 6+ with the user's answer (no @Override: the method is not in API 19). */
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode != REQUEST_STORAGE) return;
+        Runnable action = afterStoragePermission;
+        afterStoragePermission = null;
+        if (action != null) action.run();
+    }
+
     private boolean isPrivateDownload(File f) {
         return f.getAbsolutePath().startsWith(getFilesDir().getAbsolutePath());
     }
@@ -449,7 +490,11 @@ public class MainActivity extends Activity {
                 latest.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        downloadLatest(item);
+                        withStoragePermission(new Runnable() {
+                            public void run() {
+                                downloadLatest(item);
+                            }
+                        });
                     }
                 });
             }
@@ -1191,7 +1236,11 @@ public class MainActivity extends Activity {
         btnDownload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startDownload();
+                withStoragePermission(new Runnable() {
+                    public void run() {
+                        startDownload();
+                    }
+                });
             }
         });
 
