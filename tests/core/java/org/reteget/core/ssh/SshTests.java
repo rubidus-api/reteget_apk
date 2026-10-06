@@ -8,7 +8,9 @@ import java.security.KeyPairGenerator;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
@@ -42,6 +44,296 @@ public final class SshTests {
         testSftpBehaviour();
         testVersionExchange();
         testTampering();
+        testBlowfish();
+        testKeyFilesOwn();
+        testKeyFilesFromSshKeygen();
+        testPublicKeyAuthentication();
+    }
+
+    // --- key files ---
+
+    private static void testBlowfish() {
+        try {
+            Random rnd = new Random(5);
+            boolean same = true;
+            for (int i = 0; i < 5; i++) {
+                byte[] key = new byte[8 + i * 6];
+                rnd.nextBytes(key);
+                byte[] block = new byte[16];
+                rnd.nextBytes(block);
+                Cipher c = Cipher.getInstance("Blowfish/ECB/NoPadding");
+                c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "Blowfish"));
+                byte[] expect = c.doFinal(block);
+                int[] w = new int[4];
+                for (int k = 0; k < 4; k++) {
+                    w[k] = ((block[4 * k] & 0xff) << 24) | ((block[4 * k + 1] & 0xff) << 16) | ((block[4 * k + 2] & 0xff) << 8) | (block[4 * k + 3] & 0xff);
+                }
+                new BcryptPbkdf.Blowfish(key).encrypt(w, 2);
+                byte[] got = new byte[16];
+                for (int k = 0; k < 4; k++) {
+                    got[4 * k] = (byte) (w[k] >>> 24);
+                    got[4 * k + 1] = (byte) (w[k] >>> 16);
+                    got[4 * k + 2] = (byte) (w[k] >>> 8);
+                    got[4 * k + 3] = (byte) w[k];
+                }
+                same &= Arrays.equals(expect, got);
+            }
+            check("Blowfish (pi digits computed, not tabled) equals the JDK's", same);
+            checkEq("Blowfish P[0] is the first word of pi's fraction", 0x243f6a88, new BcryptPbkdf.Blowfish().p[0]);
+        } catch (Exception e) {
+            check("Blowfish: " + e, false);
+        }
+    }
+
+    private static void testKeyFilesOwn() {
+        try {
+            byte[] seed = hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60");
+            SshKeyFile plain = SshKeyFile.ed25519FromSeed(seed, "me@phone", null);
+            check("written key: not protected", !plain.isProtected() && "ssh-ed25519".equals(plain.type));
+            check("written key: public line", plain.publicKeyLine("me@phone").equals(
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea me@phone"));
+            SshIdentity id = plain.unlock(null);
+            check("written key: signs", Ed25519.verify(Ed25519.publicKey(seed), "x".getBytes(), id.sign("ssh-ed25519", "x".getBytes())));
+
+            SshKeyFile locked = plain.withPassphrase(null, "correct horse");
+            check("re-protected key: protected, same public key", locked.isProtected()
+                    && locked.fingerprint().equals(plain.fingerprint()) && locked.text().contains("BEGIN OPENSSH PRIVATE KEY"));
+            check("re-protected key: the seed is not in the file",
+                    !hex(SshBase64.decode(locked.text().replace("-----BEGIN OPENSSH PRIVATE KEY-----", "")
+                            .replace("-----END OPENSSH PRIVATE KEY-----", ""))).contains(hex(seed)));
+            check("re-protected key: opens with the passphrase",
+                    Arrays.equals(id.sign("ssh-ed25519", "y".getBytes()), locked.unlock("correct horse").sign("ssh-ed25519", "y".getBytes())));
+            boolean wrong = false;
+            try {
+                locked.unlock("incorrect horse");
+            } catch (SshException e) {
+                wrong = "Wrong passphrase".equals(e.getMessage());
+            }
+            check("re-protected key: wrong passphrase says so", wrong);
+            boolean needs = false;
+            try {
+                locked.unlock(null);
+            } catch (SshException e) {
+                needs = e.getMessage().contains("needs its passphrase");
+            }
+            check("re-protected key: no passphrase says so", needs);
+            SshKeyFile unlockedAgain = locked.withPassphrase("correct horse", null);
+            check("protection removed again: same key", !unlockedAgain.isProtected()
+                    && Arrays.equals(plain.publicBlob(), unlockedAgain.publicBlob()) && unlockedAgain.unlock(null) != null);
+            SshKeyFile reread = SshKeyFile.parse(locked.text());
+            check("stored text parses back", reread.isProtected() && reread.unlock("correct horse") != null);
+
+            SshKeyFile gen = SshKeyFile.generateEd25519("new key", "pw12345");
+            SshKeyFile gen2 = SshKeyFile.generateEd25519("new key", "pw12345");
+            check("generated keys differ", !gen.fingerprint().equals(gen2.fingerprint()) && gen.isProtected());
+
+            // bcrypt_pbkdf known answer (pinned after the ssh-keygen interop below passed)
+            checkEq("bcrypt_pbkdf: OpenBSD test vector (password, salt, 4 rounds, 32 bytes)",
+                    "5bbf0cc293587f1c3635555c27796598d47e579071bf427e9d8fbe842aba34d9",
+                    hex(BcryptPbkdf.derive("password".getBytes(), "salt".getBytes(), 4, 32)));
+            checkEq("bcrypt_pbkdf known answer", BCRYPT_KAT, hex(BcryptPbkdf.derive("password".getBytes(), "salt".getBytes(), 4, 48)));
+
+            String[][] bad = {
+                    { "PuTTY-User-Key-File-3: ssh-ed25519\n", "PuTTY" },
+                    { "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea x", "public key" },
+                    { "-----BEGIN EC PRIVATE KEY-----\nAAAA\n-----END EC PRIVATE KEY-----", "Only Ed25519 and RSA" },
+                    { "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,00\n\nAAAA\n-----END RSA PRIVATE KEY-----", "ssh-keygen -p" },
+                    { "hello", "not an OpenSSH private key" },
+                    { "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----", "not an OpenSSH private key" },
+            };
+            for (String[] b : bad) {
+                String msg = null;
+                try {
+                    SshKeyFile.parse(b[0]);
+                } catch (IOException e) {
+                    msg = e.getMessage();
+                }
+                check("unsupported key input explained: " + b[1], msg != null && msg.contains(b[1]));
+            }
+            // truncated and corrupted files never throw anything but an SshException / IOException
+            String text = plain.text();
+            boolean clean = true;
+            for (int cut = 40; cut < text.length() - 40; cut += 37) {
+                try {
+                    SshKeyFile.parse(text.substring(0, cut) + "\n-----END OPENSSH PRIVATE KEY-----").unlock(null);
+                } catch (IOException e) {
+                    // expected
+                } catch (RuntimeException e) {
+                    clean = false;
+                }
+            }
+            check("truncated key files fail cleanly", clean);
+        } catch (Exception e) {
+            check("own key files: " + e, false);
+        }
+    }
+
+    static final String BCRYPT_KAT = "5ba4bfc60c7ac272931458407f4c1c4936ea356c55125c5a279b791d65bf9842d49d7e1b572a9052715ebfa9421e7e94";
+
+    private static String run(java.io.File dir, String... cmd) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.directory(dir);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        p.getOutputStream().close();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] b = new byte[4096];
+        int n;
+        while ((n = p.getInputStream().read(b)) > 0) out.write(b, 0, n);
+        p.waitFor();
+        return out.toString("UTF-8");
+    }
+
+    private static String readText(java.io.File f) throws IOException {
+        java.io.FileInputStream in = new java.io.FileInputStream(f);
+        try {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[4096];
+            int n;
+            while ((n = in.read(b)) > 0) out.write(b, 0, n);
+            return out.toString("UTF-8");
+        } finally {
+            in.close();
+        }
+    }
+
+    /**
+     * Key files made by the real ssh-keygen, when it is installed: an implementation of the file
+     * format, bcrypt_pbkdf and both key types that is not ours. The keys exist only in a
+     * temporary directory for the length of the test.
+     */
+    private static void testKeyFilesFromSshKeygen() {
+        java.io.File dir = null;
+        try {
+            if (!new java.io.File("/usr/bin/ssh-keygen").canExecute()) {
+                System.out.println("  SKIP: ssh-keygen is not installed; OpenSSH key file interop not run");
+                return;
+            }
+            dir = java.io.File.createTempFile("sshkeys", "");
+            dir.delete();
+            dir.mkdirs();
+            String[][] cases = {
+                    { "ed_plain", "-t", "ed25519", "-N", "" },
+                    { "ed_pass", "-t", "ed25519", "-N", "secret pass" },
+                    { "ed_gcm", "-t", "ed25519", "-N", "secret pass", "-Z", "aes256-gcm@openssh.com" },
+                    { "rsa_pass", "-t", "rsa", "-b", "2048", "-N", "secret pass" },
+                    { "rsa_pem", "-t", "rsa", "-b", "2048", "-N", "", "-m", "PEM" },
+                    { "rsa_p8", "-t", "rsa", "-b", "2048", "-N", "", "-m", "PKCS8" },
+            };
+            for (String[] c : cases) {
+                List<String> cmd = new ArrayList<String>(Arrays.asList("ssh-keygen", "-q", "-C", "c@t", "-f", c[0]));
+                cmd.addAll(Arrays.asList(c).subList(1, c.length));
+                run(dir, cmd.toArray(new String[0]));
+                String pass = c[4].length() > 0 && !"2048".equals(c[4]) ? c[4] : c.length > 6 && c[5].equals("-N") ? c[6] : "";
+                if ("rsa_pass".equals(c[0])) pass = "secret pass";
+                SshKeyFile k = SshKeyFile.parse(readText(new java.io.File(dir, c[0])));
+                String pubLine = readText(new java.io.File(dir, c[0] + ".pub")).trim();
+                checkEq("ssh-keygen " + c[0] + ": public key line", pubLine, k.publicKeyLine("c@t"));
+                String fp = run(dir, "ssh-keygen", "-l", "-f", c[0] + ".pub").split(" ")[1];
+                checkEq("ssh-keygen " + c[0] + ": fingerprint", fp, k.fingerprint());
+                checkEq("ssh-keygen " + c[0] + ": protected", pass.length() > 0, k.isProtected());
+                SshIdentity id = k.unlock(pass.length() > 0 ? pass : null);
+                byte[] msg = "signed by reteget".getBytes();
+                for (String alg : id.algorithms(null)) {
+                    check("ssh-keygen " + c[0] + ": our " + alg + " signature verifies",
+                            SshHostKey.parse(k.publicBlob()).verify(alg, msg,
+                                    new SshBuf.Writer().string(alg).string(id.sign(alg, msg)).bytes()));
+                }
+                if (pass.length() > 0) {
+                    boolean wrong = false;
+                    try {
+                        k.unlock("not the passphrase");
+                    } catch (SshException e) {
+                        wrong = "Wrong passphrase".equals(e.getMessage());
+                    }
+                    check("ssh-keygen " + c[0] + ": wrong passphrase refused", wrong);
+                }
+            }
+            // The other direction: ssh-keygen reads a key we generated and protected.
+            SshKeyFile ours = SshKeyFile.generateEd25519("made on the phone", "phone pass");
+            java.io.File f = new java.io.File(dir, "ours");
+            java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+            o.write(ours.text().getBytes("UTF-8"));
+            o.close();
+            f.setReadable(false, false);
+            f.setReadable(true, true);
+            f.setWritable(false, false);
+            f.setWritable(true, true);
+            String pub = run(dir, "ssh-keygen", "-y", "-P", "phone pass", "-f", "ours").trim();
+            check("ssh-keygen reads a protected key written here: " + pub, pub.startsWith(ours.publicKeyLine("")));
+            String refused = run(dir, "ssh-keygen", "-y", "-P", "wrong pass", "-f", "ours");
+            check("ssh-keygen refuses it with a wrong passphrase", !refused.contains("ssh-ed25519 AAAA"));
+        } catch (Exception e) {
+            check("ssh-keygen key files: " + e, false);
+        } finally {
+            if (dir != null) {
+                java.io.File[] fs = dir.listFiles();
+                if (fs != null) for (java.io.File x : fs) x.delete();
+                dir.delete();
+            }
+        }
+    }
+
+    private static void testPublicKeyAuthentication() {
+        TestSshServer srv = null;
+        try {
+            SshKeyFile ed = SshKeyFile.generateEd25519("k", null);
+            SshIdentity edId = ed.unlock(null);
+            srv = server();
+            srv.allowPassword = false;
+            srv.authorizedKeys.add(ed.publicBlob());
+            srv.start();
+            Fetch f = fetch(srv.port(), "/pub/file.bin", "user", null, edId, TRUST_ALL, null, 0, -1);
+            check("Ed25519 key logs in" + (f.error != null ? " (" + f.error + ")" : ""), f.error == null && Arrays.equals(FILE, f.data));
+            check("the key is offered before it is used to sign",
+                    srv.log.indexOf("publickey ssh-ed25519 query") >= 0
+                            && srv.log.indexOf("publickey ssh-ed25519 query") < srv.log.indexOf("publickey ssh-ed25519 signed"));
+            f = fetch(srv.port(), "/pub/file.bin", "user", null, null, TRUST_ALL, null, 0, -1);
+            check("key needed but none chosen: hint", f.error != null && f.message().contains("needs a key"));
+            SshIdentity other = SshKeyFile.generateEd25519("other", null).unlock(null);
+            srv.log.clear();
+            f = fetch(srv.port(), "/pub/file.bin", "user", null, other, TRUST_ALL, null, 0, -1);
+            check("a key the server does not know fails without signing anything",
+                    f.error != null && f.message().startsWith("Authentication failed") && !srv.log.contains("publickey ssh-ed25519 signed"));
+            srv.close();
+
+            srv = server();
+            srv.authorizedKeys.add(ed.publicBlob());
+            srv.start();
+            f = fetch(srv.port(), "/pub/file.bin", "user", "pw", other, TRUST_ALL, null, 0, -1);
+            check("unknown key, then the password works", f.error == null && Arrays.equals(FILE, f.data)
+                    && srv.log.contains("auth password"));
+            srv.log.clear();
+            f = fetch(srv.port(), "/pub/file.bin", "user", "pw", edId, TRUST_ALL, null, 0, -1);
+            check("with an accepted key the password is never sent", f.error == null && !srv.log.contains("auth password"));
+            srv.close();
+
+            // RSA through a JDK-made key converted from PKCS#8 PEM
+            java.security.KeyPair kp = TestSshServer.generate("ssh-rsa");
+            String pem = "-----BEGIN PRIVATE KEY-----\n" + SshBase64.encode(kp.getPrivate().getEncoded(), true)
+                    + "\n-----END PRIVATE KEY-----\n";
+            SshKeyFile rsa = SshKeyFile.parse(pem);
+            check("PKCS#8 RSA key converted: same public key as the JDK's",
+                    Arrays.equals(TestSshServer.blob(kp.getPublic()), rsa.publicBlob()) && "ssh-rsa".equals(rsa.type));
+            SshIdentity rsaId = rsa.withPassphrase(null, "rsa-pass").unlock("rsa-pass");
+            for (String[] algs : new String[][] { null, { "rsa-sha2-256" }, { "rsa-sha2-512", "ssh-ed25519" } }) {
+                srv = server();
+                srv.allowPassword = false;
+                srv.authorizedKeys.add(rsa.publicBlob());
+                srv.serverSigAlgs = algs;
+                srv.start();
+                f = fetch(srv.port(), "/pub/file.bin", "user", null, rsaId, TRUST_ALL, null, 0, -1);
+                String expect = algs == null ? "rsa-sha2-512" : algs[0];
+                check("RSA key logs in, server-sig-algs " + (algs == null ? "absent" : Arrays.toString(algs))
+                                + (f.error != null ? " (" + f.error + ")" : ""),
+                        f.error == null && Arrays.equals(FILE, f.data) && srv.log.contains("publickey " + expect + " signed"));
+                srv.close();
+            }
+        } catch (Exception e) {
+            check("public key authentication: " + e, false);
+        } finally {
+            if (srv != null) srv.close();
+        }
     }
 
     private static boolean jdkHasEd25519() {
