@@ -698,6 +698,18 @@ public class TestRunner {
     }
 
     private static void testIndexMatcher() {
+        assertTrue("rate limit: GitHub API 403", IndexMatcher.rateLimited(
+                "https://api.github.com/repos/rubidus-api/reteget_apk/releases?per_page=20",
+                "HTTP server returned error response: 403 rate limit exceeded"));
+        assertTrue("rate limit: GitHub API 429 on the own-socket path", IndexMatcher.rateLimited(
+                "https://API.github.com/repos/x/y/releases", "HTTP server returned error: HTTP/1.1 429 Too Many Requests"));
+        assertTrue("rate limit: 403 elsewhere is not GitHub's limit", !IndexMatcher.rateLimited(
+                "https://example.com/files/", "HTTP server returned error response: 403 Forbidden"));
+        assertTrue("rate limit: other GitHub errors stay as they are", !IndexMatcher.rateLimited(
+                "https://api.github.com/repos/x/y/releases", "HTTP server returned error response: 404 Not Found"));
+        assertTrue("rate limit: a port number containing 403 does not count", !IndexMatcher.rateLimited(
+                "https://api.github.com/repos/x/y/releases", "connect timed out: api.github.com:14030"));
+        assertTrue("rate limit: no error", !IndexMatcher.rateLimited("https://api.github.com/x", null));
         assertTrue("natural order: 0.3.9 before 0.3.10", IndexMatcher.naturalCompare("0.3.9", "0.3.10") < 0);
         assertTrue("natural order: 0.1.199 before 0.1.200", IndexMatcher.naturalCompare("a-0.1.199.apk", "a-0.1.200.apk") < 0);
         assertTrue("natural order: case ignored, file2 before File10", IndexMatcher.naturalCompare("file2", "File10") < 0);

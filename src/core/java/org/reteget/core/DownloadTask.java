@@ -48,6 +48,8 @@ public final class DownloadTask {
     public String note;
     /** sftp://: the fingerprint of the user's key to log in with (null: password only). */
     public String sshKey;
+    /** Plain http origins the user let this https download be redirected to, space separated (null: none). */
+    public String allowHttp;
     /**
      * Set on a FAILED entry that waits for the user: the token of an
      * {@link org.reteget.core.ssh.SshPromptException} (confirm a host key, give a passphrase).
@@ -130,6 +132,7 @@ public final class DownloadTask {
         t.note = note;
         t.sshKey = sshKey;
         t.ask = ask;
+        t.allowHttp = allowHttp;
         return t;
     }
 
@@ -161,6 +164,7 @@ public final class DownloadTask {
         if (note != null) sb.append(",\"note\":").append(PresetItem.escapeJson(note));
         if (sshKey != null) sb.append(",\"sshkey\":").append(PresetItem.escapeJson(sshKey));
         if (ask != null) sb.append(",\"ask\":").append(PresetItem.escapeJson(ask));
+        if (allowHttp != null) sb.append(",\"allowhttp\":").append(PresetItem.escapeJson(allowHttp));
         return sb.append("}").toString();
     }
 
@@ -199,6 +203,7 @@ public final class DownloadTask {
         t.note = PresetItem.extractJsonString(json, "note");
         t.sshKey = PresetItem.extractJsonString(json, "sshkey");
         t.ask = PresetItem.extractJsonString(json, "ask");
+        t.allowHttp = PresetItem.extractJsonString(json, "allowhttp");
         return t;
     }
 }

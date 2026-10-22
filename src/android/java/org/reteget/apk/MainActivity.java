@@ -33,6 +33,7 @@ import org.reteget.core.ChecksumVerifier;
 import org.reteget.core.DownloadEngine;
 import org.reteget.core.DownloadQueue;
 import org.reteget.core.DownloadTask;
+import org.reteget.core.RedirectQuestion;
 import org.reteget.core.HttpAuth;
 import org.reteget.core.IndexMatcher;
 import org.reteget.core.PresetItem;
@@ -96,6 +97,8 @@ public class MainActivity extends Activity {
     private Button btnSshKey;
     /** Questions (entry id and question) already put to the user in this run, so each pops up once. */
     private static final java.util.Set<String> sAsked = new java.util.HashSet<String>();
+    /** The download the user started last; the status line follows it until the next one starts. */
+    private static long sStatusTaskId = -1;
     private TextView txtNoPresets;
     private LinearLayout layoutPresetsList;
     private LinearLayout layoutPresetBatch;
@@ -209,6 +212,17 @@ public class MainActivity extends Activity {
         Runnable action = afterStoragePermission;
         afterStoragePermission = null;
         if (action != null) action.run();
+    }
+
+    /** Android 6+: the user refused (or was never asked for) the storage permission. */
+    private boolean storagePermissionMissing() {
+        if (Build.VERSION.SDK_INT < 23) return false;
+        try {
+            Object granted = Context.class.getMethod("checkSelfPermission", String.class).invoke(this, STORAGE_PERMISSION);
+            return !Integer.valueOf(PackageManager.PERMISSION_GRANTED).equals(granted);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private boolean isPrivateDownload(File f) {
@@ -339,7 +353,7 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 final String url = editUrl.getText().toString().trim();
                 if (url.isEmpty()) {
-                    Toast.makeText(MainActivity.this, "URL is empty", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, R.string.toast_url_empty, Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -1060,7 +1074,7 @@ public class MainActivity extends Activity {
                     LinearLayout.LayoutParams.FILL_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT));
             input.setTextSize(13);
-            input.setHint("Value for {" + placeholder + "}");
+            input.setHint(getString(R.string.hint_placeholder_value, placeholder));
             input.setSingleLine(true);
 
             if (oldValues.containsKey(placeholder)) {
@@ -1097,7 +1111,7 @@ public class MainActivity extends Activity {
             values.put(entry.getKey(), entry.getValue().getText().toString());
         }
         String resolved = currentTemplate.resolve(values);
-        txtResolvedPreview.setText("Resolved URL:\n" + HttpAuth.mask(resolved));
+        txtResolvedPreview.setText(getString(R.string.resolved_url, HttpAuth.mask(resolved)));
     }
 
     private String getFinalDownloadUrl() {
@@ -1159,7 +1173,7 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 if (lastDownloadedFile == null || !lastDownloadedFile.exists()) {
-                    Toast.makeText(MainActivity.this, "No file downloaded yet", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, R.string.toast_no_file, Toast.LENGTH_SHORT).show();
                     return;
                 }
                 showVerifyDialog();
@@ -1177,7 +1191,7 @@ public class MainActivity extends Activity {
                 .setTitle(R.string.btn_verify_hash)
                 .setMessage(R.string.lbl_checksum)
                 .setView(input)
-                .setPositiveButton("Verify", new DialogInterface.OnClickListener() {
+                .setPositiveButton(R.string.btn_verify, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         String hash = input.getText().toString().trim();
@@ -1187,7 +1201,7 @@ public class MainActivity extends Activity {
                         }
                     }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.btn_cancel, null)
                 .show();
     }
 
@@ -1203,7 +1217,7 @@ public class MainActivity extends Activity {
             } else if (res.error != null) {
                 hasChecksumMismatch = false;
                 txtChecksumResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
-                txtChecksumResult.setText("Checksum error: " + res.error + "\nComputed SHA-256: " + lastComputedSha256);
+                txtChecksumResult.setText(getString(R.string.checksum_error, res.error, lastComputedSha256));
             } else {
                 hasChecksumMismatch = true;
                 txtChecksumResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
@@ -1259,15 +1273,14 @@ public class MainActivity extends Activity {
     private void startDownload() {
         String url = getFinalDownloadUrl();
         if (url.isEmpty()) {
-            Toast.makeText(this, "Please enter a valid URL", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.toast_invalid_url, Toast.LENGTH_SHORT).show();
             return;
         }
 
         String lower = url.toLowerCase();
         if (!lower.startsWith("http://") && !lower.startsWith("https://") && !lower.startsWith("ftp://")
                 && !lower.startsWith("sftp://") && !lower.startsWith("ftpes://") && !lower.startsWith("ftps://")) {
-            Toast.makeText(this, "URL must start with http://, https://, ftp://, ftpes://, ftps://, or sftp://",
-                    Toast.LENGTH_LONG).show();
+            Toast.makeText(this, R.string.toast_bad_scheme, Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -1281,9 +1294,9 @@ public class MainActivity extends Activity {
         if (v1 != null && v1.getText().toString().trim().length() > 0) {
             version = v1.getText().toString().trim();
         }
-        sQueue.enqueue(url, destDir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
+        showStarted(sQueue.enqueue(url, destDir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
                 editExpectedChecksum.getText().toString().trim(), template, version,
-                isSftp(url) ? selectedSshKey : null);
+                isSftp(url) ? selectedSshKey : null));
         Toast.makeText(this, R.string.queue_added, Toast.LENGTH_SHORT).show();
         scrollView.smoothScrollTo(0, 0);
     }
@@ -1322,7 +1335,7 @@ public class MainActivity extends Activity {
                     @Override
                     public void run() {
                         if (page == null) {
-                            finishLatest(item, index, null, "too large");
+                            finishLatest(item, index, null, getString(R.string.latest_too_large));
                         } else {
                             finishLatest(item, index, m, null);
                         }
@@ -1347,7 +1360,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        finishLatest(item, index, null, "larger than 1 MB");
+                        finishLatest(item, index, null, getString(R.string.latest_too_large));
                     }
                 });
             }
@@ -1357,7 +1370,8 @@ public class MainActivity extends Activity {
     private void finishLatest(PresetItem item, String index, IndexMatcher.Match m, String error) {
         if (isFinishing()) return;
         if (error != null) {
-            Toast.makeText(this, getString(R.string.latest_failed, HttpAuth.mask(index), error), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, IndexMatcher.rateLimited(index, error) ? getString(R.string.latest_rate_limited)
+                    : getString(R.string.latest_failed, HttpAuth.mask(index), error), Toast.LENGTH_LONG).show();
             return;
         }
         if (m == null) {
@@ -1373,9 +1387,9 @@ public class MainActivity extends Activity {
                 input.setText(m.version);
             }
         }
-        sQueue.enqueue(m.url, chooseDownloadDir(), chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
+        showStarted(sQueue.enqueue(m.url, chooseDownloadDir(), chkInsecureSsl.isChecked(), chkPureTls.isChecked(),
                 editExpectedChecksum.getText().toString().trim(), item.url, m.version,
-                isSftp(m.url) ? item.sshKey : null);
+                isSftp(m.url) ? item.sshKey : null));
         Toast.makeText(this, getString(R.string.latest_found, m.url.substring(m.url.lastIndexOf('/') + 1)),
                 Toast.LENGTH_LONG).show();
     }
@@ -1417,6 +1431,7 @@ public class MainActivity extends Activity {
                         if (task == null || !updateQueueRow(task)) {
                             renderQueue();
                         }
+                        showEnded(task);
                         askIfWaiting(task);
                     }
                 });
@@ -1518,6 +1533,36 @@ public class MainActivity extends Activity {
         }, "VerifyThread").start();
     }
 
+    /**
+     * A new download replaces what the screen says about the last one: the status line names the
+     * new file, and the checksum, signature and Install of the previous file are hidden.
+     */
+    private void showStarted(DownloadTask task) {
+        if (task == null) return;
+        sStatusTaskId = task.id;
+        lastComputedSha256 = null;
+        lastDownloadedFile = null;
+        btnInstall.setVisibility(View.GONE);
+        layoutChecksumResult.setVisibility(View.GONE);
+        hasChecksumMismatch = false;
+        layoutSignatureResult.setVisibility(View.GONE);
+        hasSignatureMismatch = false;
+        lastSignatureResult = null;
+        String name = task.fileName != null ? task.fileName : HttpAuth.mask(task.url);
+        txtStatus.setText(getString(R.string.status_started, name));
+    }
+
+    /** The download the status line follows failed or was cancelled. */
+    private void showEnded(DownloadTask task) {
+        if (task == null || task.id != sStatusTaskId) return;
+        if (task.state == DownloadTask.State.FAILED && task.ask == null) {
+            txtStatus.setText(getString(R.string.status_error,
+                    HttpAuth.mask(task.error != null ? task.error : "?")));
+        } else if (task.state == DownloadTask.State.CANCELLED) {
+            txtStatus.setText(R.string.status_cancelled);
+        }
+    }
+
     private void handleCompletedDownload(DownloadTask task, File destinationFile, String sha256) {
         lastComputedSha256 = sha256;
         lastDownloadedFile = destinationFile;
@@ -1531,10 +1576,10 @@ public class MainActivity extends Activity {
             // Readable by the package installer; see chooseDownloadDir().
             destinationFile.setReadable(true, false);
         }
-        txtStatus.setText((isPrivateDownload(destinationFile)
-                ? "Shared storage unavailable. Saved in app storage: " : "Saved to: ")
-                + destinationFile.getAbsolutePath()
-                + " (" + formatBytes(destinationFile.length()) + ")"
+        int saved = !isPrivateDownload(destinationFile) ? R.string.status_saved
+                : storagePermissionMissing() ? R.string.status_saved_no_permission : R.string.status_saved_app_storage;
+        txtStatus.setText(getString(saved, destinationFile.getAbsolutePath()
+                + " (" + formatBytes(destinationFile.length()) + ")")
                 + (task.tlsSummary != null ? "\n" + task.tlsSummary : ""));
 
         verifyDownloadedFile(destinationFile, task.expectedChecksum);
@@ -1554,7 +1599,7 @@ public class MainActivity extends Activity {
         } else {
             sQueue.markVerified(task.id, sha256, warningsFor(hasChecksumMismatch, false));
             updatePresetDownloadRecord(destinationFile, task.template, task.url, task.version);
-            Toast.makeText(MainActivity.this, "File saved successfully", Toast.LENGTH_SHORT).show();
+            Toast.makeText(MainActivity.this, R.string.toast_file_saved, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1642,6 +1687,21 @@ public class MainActivity extends Activity {
 
     /** Puts the entry's question (host key, passphrase) to the user; the download goes on after the answer. */
     private void answerQuestion(final DownloadTask t) {
+        final RedirectQuestion r = RedirectQuestion.fromToken(t.ask);
+        if (r != null) {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.redirect_title)
+                    .setMessage(getString(R.string.redirect_msg, r.fromHost, r.target))
+                    .setPositiveButton(R.string.redirect_btn_continue, new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            sQueue.allowHttp(t.id, r.origin());
+                            showStarted(t);
+                        }
+                    })
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show();
+            return;
+        }
         sshUi.answer(t, new Runnable() {
             public void run() {
                 sQueue.retry(t.id);
@@ -1684,7 +1744,10 @@ public class MainActivity extends Activity {
                     });
                 }
                 addQueueButton(buttons, R.string.queue_retry, false, new Runnable() {
-                    public void run() { sQueue.retry(t.id); }
+                    public void run() {
+                        sQueue.retry(t.id);
+                        showStarted(t);
+                    }
                 });
                 addQueueButton(buttons, R.string.queue_remove, true, new Runnable() {
                     public void run() { sQueue.remove(t.id); }
@@ -1831,7 +1894,7 @@ public class MainActivity extends Activity {
                         launchApkInstaller(lastDownloadedFile);
                     }
                 } else {
-                    Toast.makeText(MainActivity.this, "APK file not found", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, R.string.toast_apk_missing, Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -1851,17 +1914,17 @@ public class MainActivity extends Activity {
                         }
                     }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.btn_cancel, null)
                 .show();
     }
 
     private void promptSignatureMismatchDialog(final File apkFile) {
         String existingSrc = (lastSignatureResult != null && lastSignatureResult.existingSource != null)
-                ? lastSignatureResult.existingSource : "Existing";
+                ? lastSignatureResult.existingSource : getString(R.string.sig_existing);
         String existingFp = (lastSignatureResult != null && lastSignatureResult.existingFingerprint != null)
-                ? lastSignatureResult.existingFingerprint : "Unknown";
+                ? lastSignatureResult.existingFingerprint : getString(R.string.sig_unknown);
         String currentFp = (lastSignatureResult != null && lastSignatureResult.currentCert != null)
-                ? lastSignatureResult.currentCert.sha256Fingerprint : "Unknown";
+                ? lastSignatureResult.currentCert.sha256Fingerprint : getString(R.string.sig_unknown);
 
         String msg = getString(R.string.dialog_sig_mismatch_msg, existingSrc, existingFp, currentFp);
 
@@ -1878,7 +1941,7 @@ public class MainActivity extends Activity {
                         launchApkInstaller(apkFile);
                     }
                 })
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.btn_cancel, null)
                 .show();
     }
 
@@ -1973,7 +2036,7 @@ public class MainActivity extends Activity {
                 txtSignatureResult.setTextColor(Color.parseColor("#b71c1c")); // Dark Red
                 txtSignatureResult.setText(getString(R.string.sig_mismatch_installed,
                         (packageName != null ? packageName : "app"),
-                        (installedCert != null ? installedCert.sha256Fingerprint : "Unknown"),
+                        (installedCert != null ? installedCert.sha256Fingerprint : getString(R.string.sig_unknown)),
                         currentCert.sha256Fingerprint));
                 break;
             case MISMATCH_PREVIOUS:
@@ -2081,15 +2144,15 @@ public class MainActivity extends Activity {
 
     private void promptAutoInstall(final File apkFile) {
         new AlertDialog.Builder(this)
-                .setTitle("Download Complete")
-                .setMessage("Downloaded " + apkFile.getName() + ".\nInstall now?")
-                .setPositiveButton("Install", new DialogInterface.OnClickListener() {
+                .setTitle(R.string.dialog_complete_title)
+                .setMessage(getString(R.string.dialog_complete_msg, apkFile.getName()))
+                .setPositiveButton(R.string.btn_install_short, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         launchApkInstaller(apkFile);
                     }
                 })
-                .setNegativeButton("Later", null)
+                .setNegativeButton(R.string.btn_later, null)
                 .show();
     }
 
@@ -2119,7 +2182,7 @@ public class MainActivity extends Activity {
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
         } catch (Exception e) {
-            Toast.makeText(this, "Could not open installer: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.toast_installer_failed, e.getMessage()), Toast.LENGTH_LONG).show();
         }
     }
 

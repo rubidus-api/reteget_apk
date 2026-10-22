@@ -174,4 +174,33 @@
     <string name="latest_none">Nothing on %1$s fits the preset URL</string>
     <string name="latest_failed">Could not read %1$s: %2$s</string>
     <string name="preset_index_label">latest from</string>
+    <!-- 0.6.0: strings that were hard-coded in MainActivity -->
+    <string name="toast_url_empty">URL is empty</string>
+    <string name="hint_placeholder_value">Value for {%1$s}</string>
+    <string name="resolved_url">Resolved URL:\n%1$s</string>
+    <string name="toast_no_file">No file downloaded yet</string>
+    <string name="btn_verify">Verify</string>
+    <string name="checksum_error">Checksum error: %1$s\nComputed SHA-256: %2$s</string>
+    <string name="toast_invalid_url">Please enter a valid URL</string>
+    <string name="toast_bad_scheme">URL must start with http://, https://, ftp://, ftpes://, ftps://, or sftp://</string>
+    <string name="status_started">Downloading %1$s…</string>
+    <string name="status_cancelled">Download cancelled.</string>
+    <string name="status_saved">Saved to: %1$s</string>
+    <string name="status_saved_app_storage">Shared storage unavailable. Saved in app storage: %1$s</string>
+    <string name="status_saved_no_permission">Storage permission not granted. Saved in app storage: %1$s</string>
+    <string name="toast_file_saved">File saved successfully</string>
+    <string name="toast_apk_missing">APK file not found</string>
+    <string name="sig_existing">Existing</string>
+    <string name="sig_unknown">Unknown</string>
+    <string name="dialog_complete_title">Download Complete</string>
+    <string name="dialog_complete_msg">Downloaded %1$s.\nInstall now?</string>
+    <string name="btn_install_short">Install</string>
+    <string name="btn_later">Later</string>
+    <string name="toast_installer_failed">Could not open installer: %1$s</string>
+    <string name="latest_too_large">larger than 1 MB</string>
+    <string name="latest_rate_limited">GitHub limits requests without an account to 60 an hour, and that limit is used up for now. Try Latest again later.</string>
+    <string name="redirect_title">Redirect to unencrypted http</string>
+    <string name="redirect_msg">%1$s sends this https download on to an address without encryption:\n\n%2$s\n\nOn the way there the file can be read and changed by anyone on the network. Continue only if you trust this address, and check the checksum or the APK signature afterwards.</string>
+    <string name="redirect_btn_continue">Continue over http</string>
+    <string name="redirect_wait">Waiting: confirm the redirect to http (%1$s)</string>
 </resources>

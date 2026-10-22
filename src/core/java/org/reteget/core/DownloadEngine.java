@@ -721,7 +721,27 @@ public class DownloadEngine {
         return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
     }
 
-    private static URL nextHop(URL from, String location, int code, int redirects) throws IOException {
+    /** Origins (http://host:port, space separated) that an https download may be redirected to. */
+    private volatile String allowedHttp;
+
+    /**
+     * Lets the next download follow a redirect from https to these plain http origins
+     * (space separated, as {@link HttpAuth#origin}); any other such redirect stops it with a
+     * {@link RedirectQuestion}. Null allows none.
+     */
+    public void allowHttpRedirects(String origins) {
+        allowedHttp = origins;
+    }
+
+    static boolean originListed(String list, String origin) {
+        if (list == null) return false;
+        for (String o : list.split(" ")) {
+            if (o.equals(origin)) return true;
+        }
+        return false;
+    }
+
+    private URL nextHop(URL from, String location, int code, int redirects) throws IOException {
         if (location == null || location.isEmpty()) {
             throw new IOException("HTTP redirect " + code + " without Location header");
         }
@@ -729,7 +749,12 @@ public class DownloadEngine {
             throw new IOException("Too many HTTP redirects (limit: " + MAX_REDIRECTS + ")");
         }
         // Resolve relative redirect URLs against the current URL; credentials in a Location are ignored.
-        return HttpAuth.withoutUserInfo(new URL(from, location));
+        URL next = HttpAuth.withoutUserInfo(new URL(from, location));
+        if ("https".equalsIgnoreCase(from.getProtocol()) && "http".equalsIgnoreCase(next.getProtocol())
+                && !originListed(allowedHttp, HttpAuth.origin(next))) {
+            throw new RedirectQuestion(from.getHost(), next.toString());
+        }
+        return next;
     }
 
     /** The Authorization value answering a 401 for {@code url}, or an IOException saying why not. */

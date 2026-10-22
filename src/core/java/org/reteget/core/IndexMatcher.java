@@ -121,6 +121,19 @@ public final class IndexMatcher {
         return all.get(all.size() - 1);
     }
 
+    private static final Pattern LIMIT_STATUS = Pattern.compile("\\b(403|429)\\b");
+
+    /**
+     * True when reading a GitHub API index failed on GitHub's limit for requests without an
+     * account (60 an hour per address): GitHub answers 403, or 429, to every further request.
+     */
+    public static boolean rateLimited(String pageUrl, String error) {
+        if (pageUrl == null || error == null) return false;
+        String u = pageUrl.trim().toLowerCase(java.util.Locale.US);
+        if (!u.startsWith("https://api.github.com/") && !u.startsWith("http://api.github.com/")) return false;
+        return LIMIT_STATUS.matcher(error).find();
+    }
+
     /**
      * Windows Explorer order (StrCmpLogicalW): runs of digits compare by value, everything else
      * by character, ignoring case. So 0.3.9 comes before 0.3.10, and file2 before File10.

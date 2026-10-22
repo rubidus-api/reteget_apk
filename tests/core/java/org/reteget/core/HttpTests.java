@@ -56,7 +56,9 @@ public final class HttpTests {
             testWrongPassword(p, ownSocket);
             testNoCredentials(p, ownSocket);
             testCredentialsStayWithOrigin(p, ownSocket);
+            testHttpsToHttpRedirect(p, ownSocket);
         }
+        testQueueRedirectAnswer();
         testQueueResumeRecords();
         testSettingsExportDropsPasswords();
     }
@@ -258,12 +260,19 @@ public final class HttpTests {
     static final class Server implements Runnable {
         final ServerSocket ss;
         final Handler handler;
+        /** Serves https with this context (null: plain http). */
+        final javax.net.ssl.SSLContext tls;
         final List<Request> requests = Collections.synchronizedList(new ArrayList<Request>());
         private volatile boolean closed;
 
         Server(Handler handler) throws IOException {
+            this(handler, null);
+        }
+
+        Server(Handler handler, javax.net.ssl.SSLContext tls) throws IOException {
             this.ss = new ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"));
             this.handler = handler;
+            this.tls = tls;
             Thread t = new Thread(this, "HttpTests-server");
             t.setDaemon(true);
             t.start();
@@ -274,7 +283,7 @@ public final class HttpTests {
         }
 
         String url(String path) {
-            return "http://127.0.0.1:" + port() + path;
+            return (tls != null ? "https" : "http") + "://127.0.0.1:" + port() + path;
         }
 
         public void run() {
@@ -287,6 +296,13 @@ public final class HttpTests {
                 }
                 try {
                     s.setSoTimeout(5000);
+                    if (tls != null) {
+                        javax.net.ssl.SSLSocket t = (javax.net.ssl.SSLSocket) tls.getSocketFactory()
+                                .createSocket(s, null, s.getPort(), true);
+                        t.setUseClientMode(false);
+                        t.startHandshake();
+                        s = t;
+                    }
                     InputStream in = new BufferedInputStream(s.getInputStream());
                     String line = readLine(in);
                     if (line == null) continue;
@@ -800,6 +816,130 @@ public final class HttpTests {
         } finally {
             if (a != null) a.close();
             if (b != null) b.close();
+        }
+    }
+
+    // --- https -> http redirects ---
+
+    private static javax.net.ssl.SSLContext sTls;
+
+    /** A server context with a fresh self-signed certificate, or null when keytool is missing. */
+    private static javax.net.ssl.SSLContext serverTls() throws Exception {
+        if (sTls != null) return sTls;
+        File ks = org.reteget.core.tls.TlsTests.keystore("http-redirect", "-keyalg EC -groupname secp256r1", "dns:localhost,ip:127.0.0.1");
+        if (ks == null) return null;
+        javax.net.ssl.KeyManagerFactory kmf = javax.net.ssl.KeyManagerFactory.getInstance("SunX509");
+        kmf.init(org.reteget.core.tls.TlsTests.load(ks), "changeit".toCharArray());
+        javax.net.ssl.SSLContext c = javax.net.ssl.SSLContext.getInstance("TLS");
+        c.init(kmf.getKeyManagers(), null, null);
+        return sTls = c;
+    }
+
+    private static void testHttpsToHttpRedirect(String p, boolean own) {
+        Server plain = null;
+        Server secure = null;
+        try {
+            javax.net.ssl.SSLContext ctx = serverTls();
+            if (ctx == null) {
+                System.out.println("  SKIP: keytool is missing; https redirect tests not run");
+                return;
+            }
+            final byte[] body = "file over plain http".getBytes("UTF-8");
+            plain = new Server(new Handler() {
+                public void handle(int n, Request r, OutputStream out, Server sv) throws IOException {
+                    respond(out, "200 OK", new String[] { "Content-Length: " + body.length }, body, 0, body.length);
+                }
+            });
+            final String target = plain.url("/mirror/app.apk?sig=1");
+            secure = new Server(new Handler() {
+                public void handle(int n, Request r, OutputStream out, Server sv) throws IOException {
+                    if (r.line.startsWith("GET /same ")) {
+                        respond(out, "302 Found", new String[] { "Location: /end", "Content-Length: 0" }, null, 0, 0);
+                    } else if (r.line.startsWith("GET /end ")) {
+                        respond(out, "200 OK", new String[] { "Content-Length: " + body.length }, body, 0, body.length);
+                    } else {
+                        respond(out, "302 Found", new String[] { "Location: " + target, "Content-Length: 0" }, null, 0, 0);
+                    }
+                }
+            }, ctx);
+            String start = "https://u:pw@127.0.0.1:" + secure.port() + "/app.apk";
+
+            Recorder rec = new Recorder();
+            engine().execute(start, tempDir(), true, false, own, null, rec);
+            check(p + "https->http: stops with a question", rec.error instanceof RedirectQuestion);
+            check(p + "https->http: the http server was not contacted", plain.requests.isEmpty());
+            RedirectQuestion q = rec.error instanceof RedirectQuestion ? (RedirectQuestion) rec.error : null;
+            checkEq(p + "https->http: target", target, q == null ? null : q.target);
+            checkEq(p + "https->http: origin", "http://127.0.0.1:" + plain.port(), q == null ? null : q.origin());
+            RedirectQuestion back = q == null ? null : RedirectQuestion.fromToken(q.token());
+            check(p + "https->http: token round trip", back != null && back.target.equals(q.target) && back.fromHost.equals("127.0.0.1"));
+            check(p + "https->http: no password in the question", q != null && !q.token().contains("pw") && !q.getMessage().contains("pw"));
+
+            DownloadEngine other = engine();
+            other.allowHttpRedirects("http://127.0.0.1:" + (plain.port() + 1) + " https://127.0.0.1:" + plain.port());
+            rec = new Recorder();
+            other.execute(start, tempDir(), true, false, own, null, rec);
+            check(p + "https->http: another origin allowed is not enough", rec.error instanceof RedirectQuestion);
+
+            DownloadEngine allowed = engine();
+            allowed.allowHttpRedirects("http://example.org:80 " + q.origin());
+            rec = new Recorder();
+            File dir = tempDir();
+            allowed.execute(start, dir, true, false, own, null, rec);
+            check(p + "https->http: allowed origin downloads", rec.completed != null && Arrays.equals(body, read(rec.completed)));
+            check(p + "https->http: no password sent over http", plain.requests.size() == 1
+                    && plain.requests.get(0).h("authorization") == null);
+
+            rec = new Recorder();
+            engine().execute("https://127.0.0.1:" + secure.port() + "/same", tempDir(), true, false, own, null, rec);
+            check(p + "https->https: followed without a question", rec.completed != null && rec.error == null);
+        } catch (Exception e) {
+            check(p + "https->http: " + e, false);
+        } finally {
+            if (plain != null) plain.close();
+            if (secure != null) secure.close();
+        }
+    }
+
+    private static void testQueueRedirectAnswer() {
+        try {
+            final String[] saved = { null };
+            DownloadQueue.Store store = new DownloadQueue.Store() {
+                public String load() { return saved[0]; }
+                public void save(String data) { saved[0] = data; }
+            };
+            final List<String> allowedSeen = new ArrayList<String>();
+            DownloadQueue q = new DownloadQueue(store, new DownloadQueue.EngineFactory() {
+                public DownloadQueue.Engine create() {
+                    return new DownloadQueue.Engine() {
+                        public void start(DownloadTask t, DownloadEngine.Listener l) {
+                            allowedSeen.add(String.valueOf(t.allowHttp));
+                            l.onError(new RedirectQuestion("example.com", "http://mirror.example.net:8080/a.apk"));
+                        }
+                        public void cancel() {}
+                        public String tlsSummary() { return null; }
+                    };
+                }
+            });
+            DownloadTask t = q.enqueue("https://example.com/a.apk", tempDir(), false, false, "");
+            for (int i = 0; i < 50 && allowedSeen.size() < 1; i++) Thread.sleep(20);
+            DownloadTask failed = q.snapshot().get(0);
+            check("queue redirect: entry waits with the question", failed.state == DownloadTask.State.FAILED
+                    && RedirectQuestion.fromToken(failed.ask) != null);
+            q.allowHttp(t.id, "http://mirror.example.net:8080");
+            for (int i = 0; i < 50 && allowedSeen.size() < 2; i++) Thread.sleep(20);
+            checkEq("queue redirect: the answer reaches the engine", "http://mirror.example.net:8080",
+                    allowedSeen.size() > 1 ? allowedSeen.get(1) : null);
+            check("queue redirect: answer persisted", saved[0] != null && saved[0].contains("\"allowhttp\":\"http://mirror.example.net:8080\""));
+            q.allowHttp(t.id, "http://mirror.example.net:8080");
+            for (int i = 0; i < 50 && allowedSeen.size() < 3; i++) Thread.sleep(20);
+            checkEq("queue redirect: the same origin is not added twice", "http://mirror.example.net:8080",
+                    allowedSeen.size() > 2 ? allowedSeen.get(2) : null);
+            check("queue redirect: reload keeps it", DownloadTask.fromJson(saved[0].split("\n")[0]) != null
+                    && "http://mirror.example.net:8080".equals(DownloadTask.fromJson(saved[0].split("\n")[0]).allowHttp));
+            checkEq("queue redirect: unknown token is no question", null, RedirectQuestion.fromToken("downgrade\th\thttps://x/"));
+        } catch (Exception e) {
+            check("queue redirect: " + e, false);
         }
     }
 

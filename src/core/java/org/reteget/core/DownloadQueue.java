@@ -92,6 +92,7 @@ public final class DownloadQueue {
                     public void start(DownloadTask t, DownloadEngine.Listener l) {
                         DownloadEngine.Resume r = t.partFile() != null
                                 ? new DownloadEngine.Resume(t.fileName, t.validator, t.bytesTotal) : null;
+                        e.allowHttpRedirects(t.allowHttp);
                         e.download(t.url, new File(t.destDir), t.insecure, t.forceBuiltInTls, r, t.sshKey, l);
                     }
 
@@ -158,6 +159,19 @@ public final class DownloadQueue {
             persist();
             changed(t);
         }
+    }
+
+    /**
+     * The user's answer to a {@link RedirectQuestion}: this entry may follow redirects to the plain
+     * http {@code origin}, and it is queued again.
+     */
+    public synchronized void allowHttp(long id, String origin) {
+        DownloadTask t = find(id);
+        if (t == null || origin == null || origin.length() == 0) return;
+        if (!DownloadEngine.originListed(t.allowHttp, origin)) {
+            t.allowHttp = t.allowHttp == null ? origin : t.allowHttp + " " + origin;
+        }
+        retry(id);
     }
 
     /** Queues a FAILED or CANCELLED entry again; it continues from its partial file when there is one. */

@@ -16,6 +16,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.List;
 import org.reteget.core.DownloadTask;
+import org.reteget.core.RedirectQuestion;
 import org.reteget.core.TlsCertQuestion;
 import org.reteget.core.TlsPins;
 import org.reteget.core.ssh.KnownHosts;
@@ -430,6 +431,8 @@ final class SshUi {
 
     /** The short status text for a queue entry that waits for an answer, or null when it does not. */
     String waitingText(DownloadTask t) {
+        RedirectQuestion r = RedirectQuestion.fromToken(t.ask);
+        if (r != null) return a.getString(R.string.redirect_wait, r.origin());
         TlsCertQuestion c = TlsCertQuestion.fromToken(t.ask);
         if (c != null) {
             return a.getString(TlsCertQuestion.CHANGED.equals(c.kind) ? R.string.tls_wait_changed : R.string.tls_wait_unknown, c.hostPort);
@@ -443,6 +446,7 @@ final class SshUi {
 
     /** The label of the button that answers the entry's question. */
     int answerLabel(DownloadTask t) {
+        if (RedirectQuestion.fromToken(t.ask) != null) return R.string.redirect_btn_continue;
         TlsCertQuestion c = TlsCertQuestion.fromToken(t.ask);
         if (c != null) return TlsCertQuestion.CHANGED.equals(c.kind) ? R.string.tls_btn_replace : R.string.ssh_btn_trust;
         SshPromptException q = SshPromptException.fromToken(t.ask);
