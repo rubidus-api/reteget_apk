@@ -84,6 +84,44 @@ public final class SftpSession {
         return new FileInfo(a.size, a.mtime);
     }
 
+    /** An entry of a directory listing: size -1 and mtime -1 where the server did not say. */
+    public static final class DirEntry {
+        public final String name;
+        public final boolean directory;
+        public final long size;
+        public final long mtime;
+
+        DirEntry(String name, boolean directory, long size, long mtime) {
+            this.name = name;
+            this.directory = directory;
+            this.size = size;
+            this.mtime = mtime;
+        }
+    }
+
+    /** Symbolic links followed with STAT per listing at most; beyond that a link counts as a file. */
+    static final int MAX_LINK_STATS = 200;
+
+    /** The entries of directory {@code path} without "." and "..", links resolved to what they point at. */
+    public java.util.List<DirEntry> list(String path, int max) throws IOException {
+        String dir = path.length() == 0 ? "." : path;
+        java.util.List<DirEntry> out = new java.util.ArrayList<DirEntry>();
+        int stats = 0;
+        for (SftpClient.Name n : sftp.readDir(dir, max)) {
+            if (n.name.equals(".") || n.name.equals("..")) continue;
+            SftpClient.Attrs a = n.attrs;
+            if (a.link && stats++ < MAX_LINK_STATS) {
+                try {
+                    a = sftp.stat(dir.endsWith("/") ? dir + n.name : dir + "/" + n.name);
+                } catch (SshException broken) {
+                    continue; // a link to nothing
+                }
+            }
+            out.add(new DirEntry(n.name, a.directory, a.size, a.mtime));
+        }
+        return out;
+    }
+
     /** Downloads {@code path} from {@code offset} (to {@code size} when it is >= 0) into {@code sink}. */
     public void read(String path, long offset, long size, final Sink sink) throws IOException {
         byte[] handle = sftp.open(path);

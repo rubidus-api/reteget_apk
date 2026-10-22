@@ -77,6 +77,8 @@ public final class TestSshServer implements Runnable {
     public final Map<String, byte[]> files = new HashMap<String, byte[]>();
     public final Map<String, Long> mtimes = new HashMap<String, Long>();
     public final List<String> directories = new ArrayList<String>();
+    /** Symbolic links: path -> the path they point at. */
+    public final Map<String, String> links = new HashMap<String, String>();
     public boolean noSftp;
     /** Close the socket after this many file bytes, on the first connection only (-1: never). */
     public long cutAfterFileBytes = -1;
@@ -326,6 +328,7 @@ public final class TestSshServer implements Runnable {
         long fileBytesSent, fileBytesSinceRekey;
         int reads;
         final Map<String, String> handles = new HashMap<String, String>();
+        final Map<String, List<String>> dirHandles = new HashMap<String, List<String>>();
         int nextHandle;
 
         Conn(Socket s, int number) throws IOException {
@@ -779,6 +782,14 @@ public final class TestSshServer implements Runnable {
             for (byte[] a : answers) data(a);
         }
 
+        boolean isDir(String path) {
+            if (path.equals("/") || directories.contains(path)) return true;
+            String prefix = path + "/";
+            for (String f : files.keySet()) if (f.startsWith(prefix)) return true;
+            for (String d : directories) if (d.startsWith(prefix)) return true;
+            return false;
+        }
+
         byte[] status(long id, int code, String text) {
             return new W().u8(101).u32(id).u32(code).str(text).str("").bytes();
         }
@@ -789,10 +800,60 @@ public final class TestSshServer implements Runnable {
             if (type == 1) return new W().u8(2).u32(3).bytes();
             long id = r.u32();
             switch (type) {
+                case 11: {
+                    String path = r.text();
+                    log.add("opendir " + path);
+                    String dir = path.endsWith("/") && path.length() > 1 ? path.substring(0, path.length() - 1) : path;
+                    if (!isDir(dir)) return status(id, 2, "No such directory");
+                    List<String> names = new ArrayList<String>();
+                    names.add(".");
+                    names.add("..");
+                    String prefix = dir.equals("/") ? "/" : dir + "/";
+                    java.util.Set<String> all = new java.util.TreeSet<String>(files.keySet());
+                    all.addAll(directories);
+                    all.addAll(links.keySet());
+                    for (String f : all) {
+                        if (!f.startsWith(prefix) || f.length() == prefix.length()) continue;
+                        String rest = f.substring(prefix.length());
+                        String n = rest.indexOf('/') >= 0 ? rest.substring(0, rest.indexOf('/')) : rest;
+                        if (!names.contains(n)) names.add(n);
+                    }
+                    String h = "d" + (nextHandle++);
+                    dirHandles.put(h, names);
+                    handles.put(h, prefix);
+                    return new W().u8(102).u32(id).str(h).bytes();
+                }
+                case 12: {
+                    String h = new String(r.str(), "UTF-8");
+                    List<String> names = dirHandles.remove(h);
+                    if (names == null) return status(id, 1, "EOF");
+                    String prefix = handles.get(h);
+                    W w = new W().u8(104).u32(id).u32(names.size());
+                    for (String n : names) {
+                        String full = prefix + n;
+                        w.str(n).str("longname " + n);
+                        if (links.containsKey(full)) {
+                            w.u32(4).u32(0120777);
+                        } else if (n.equals(".") || n.equals("..") || isDir(full)) {
+                            w.u32(4 | 0x80000000).u32(040755).u32(1).str("x@example").str("v");
+                        } else {
+                            byte[] f = files.get(full);
+                            Long mt = mtimes.get(full);
+                            w.u32(1 | 4 | 8).u64(f == null ? 0 : f.length).u32(0100644)
+                                    .u32(1700000000L).u32(mt == null ? 1700000000L : mt.longValue());
+                        }
+                    }
+                    return w.bytes();
+                }
                 case 17:
                 case 7: {
                     String path = r.text();
                     log.add("stat " + path);
+                    if ((q[0] & 0xff) == 17 && links.containsKey(path)) {
+                        path = links.get(path);
+                        if (!isDir(path) && !files.containsKey(path)) return status(id, 2, "No such file");
+                    }
+                    if (isDir(path)) return new W().u8(105).u32(id).u32(4).u32(040755).bytes();
                     if (directories.contains(path)) return new W().u8(105).u32(id).u32(4).u32(040755).bytes();
                     byte[] f = files.get(path);
                     if (f == null) return status(id, 2, "No such file");
@@ -808,9 +869,12 @@ public final class TestSshServer implements Runnable {
                     handles.put(h, path);
                     return new W().u8(102).u32(id).str(h).bytes();
                 }
-                case 4:
-                    handles.remove(new String(r.str(), "UTF-8"));
+                case 4: {
+                    String h = new String(r.str(), "UTF-8");
+                    handles.remove(h);
+                    dirHandles.remove(h);
                     return status(id, 0, "OK");
+                }
                 case 5: {
                     byte[] f = files.get(handles.get(new String(r.str(), "UTF-8")));
                     long off = r.u64();

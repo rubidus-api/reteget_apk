@@ -25,6 +25,7 @@ final class SftpClient {
         long size = -1;
         long mtime = -1;
         boolean directory;
+        boolean link;
     }
 
     private static final int FXP_INIT = 1;
@@ -32,9 +33,12 @@ final class SftpClient {
     private static final int FXP_OPEN = 3;
     private static final int FXP_CLOSE = 4;
     private static final int FXP_READ = 5;
+    private static final int FXP_OPENDIR = 11;
+    private static final int FXP_READDIR = 12;
     private static final int FXP_STAT = 17;
     private static final int FXP_STATUS = 101;
     private static final int FXP_HANDLE = 102;
+    private static final int FXP_NAME = 104;
     private static final int FXP_DATA = 103;
     private static final int FXP_ATTRS = 105;
 
@@ -47,6 +51,7 @@ final class SftpClient {
     private static final int ATTR_UIDGID = 2;
     private static final int ATTR_PERMISSIONS = 4;
     private static final int ATTR_ACMODTIME = 8;
+    private static final long ATTR_EXTENDED = 0x80000000L;
 
     static final int READ_SIZE = 32768;
     static final int MAX_IN_FLIGHT = 8;
@@ -70,7 +75,10 @@ final class SftpClient {
     Attrs stat(String path) throws IOException {
         long id = nextId++;
         send(new SshBuf.Writer().u8(FXP_STAT).u32(id).string(path).bytes());
-        SshBuf.Reader r = response(id, FXP_ATTRS, path);
+        return attrs(response(id, FXP_ATTRS, path));
+    }
+
+    private static Attrs attrs(SshBuf.Reader r) throws IOException {
         Attrs a = new Attrs();
         long flags = r.u32();
         if ((flags & ATTR_SIZE) != 0) a.size = r.u64();
@@ -78,12 +86,71 @@ final class SftpClient {
             r.u32();
             r.u32();
         }
-        if ((flags & ATTR_PERMISSIONS) != 0) a.directory = (r.u32() & 0170000) == 0040000;
+        if ((flags & ATTR_PERMISSIONS) != 0) {
+            long type = r.u32() & 0170000;
+            a.directory = type == 0040000;
+            a.link = type == 0120000;
+        }
         if ((flags & ATTR_ACMODTIME) != 0) {
             r.u32();
             a.mtime = r.u32();
         }
+        if ((flags & ATTR_EXTENDED) != 0) {
+            long n = r.u32();
+            for (long i = 0; i < n; i++) {
+                r.string();
+                r.string();
+            }
+        }
         return a;
+    }
+
+    /** One entry of a directory listing. */
+    static final class Name {
+        final String name;
+        final Attrs attrs;
+
+        Name(String name, Attrs attrs) {
+            this.name = name;
+            this.attrs = attrs;
+        }
+    }
+
+    /** The entries of directory {@code path} (with "." and ".."), at most {@code max}. */
+    java.util.List<Name> readDir(String path, int max) throws IOException {
+        long id = nextId++;
+        send(new SshBuf.Writer().u8(FXP_OPENDIR).u32(id).string(path).bytes());
+        byte[] handle = response(id, FXP_HANDLE, path).string();
+        java.util.List<Name> out = new java.util.ArrayList<Name>();
+        try {
+            while (true) {
+                id = nextId++;
+                send(new SshBuf.Writer().u8(FXP_READDIR).u32(id).string(handle).bytes());
+                byte[] p = receive();
+                SshBuf.Reader r = new SshBuf.Reader(p, 1, p.length - 1);
+                if (r.u32() != id) throw new SshException("the server answered SFTP requests out of order");
+                int type = p[0] & 0xff;
+                if (type == FXP_STATUS) {
+                    long code = r.u32();
+                    if (code == FX_EOF) break;
+                    throw statusError(code, r, path);
+                }
+                if (type != FXP_NAME) throw new SshException("unexpected SFTP answer " + type);
+                long count = r.u32();
+                for (long i = 0; i < count; i++) {
+                    String name = r.text();
+                    r.string(); // longname, for people
+                    out.add(new Name(name, attrs(r)));
+                    if (out.size() > max) throw new SshException("The folder lists more than " + max + " entries");
+                }
+            }
+        } finally {
+            try {
+                close(handle);
+            } catch (IOException ignored) {
+            }
+        }
+        return out;
     }
 
     byte[] open(String path) throws IOException {

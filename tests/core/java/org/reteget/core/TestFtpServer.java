@@ -37,6 +37,13 @@ public final class TestFtpServer implements Runnable {
     public boolean supportMdtm = true;
     public boolean supportEpsv = true;
     public boolean allowProtP = true;
+    /** FEAT lists MLST and MLSD works; otherwise only LIST. */
+    public boolean supportMlsd = true;
+    /** FEAT lists MLST but MLSD answers 500 (seen on old servers). */
+    public boolean brokenMlsd;
+    /** LIST lines: "unix" or "windows". */
+    public String listStyle = "unix";
+    public final List<String> directories = new ArrayList<String>();
     public String user = "user";
     public String password = "pw";
     public final Map<String, byte[]> files = new HashMap<String, byte[]>();
@@ -258,9 +265,85 @@ public final class TestFtpServer implements Runnable {
                     }
                 } else if ("RETR".equals(cmd)) {
                     retr(arg);
+                } else if ("FEAT".equals(cmd)) {
+                    reply("211-Features:");
+                    reply(supportMlsd || brokenMlsd ? " MLST type*;size*;modify*;" : " SIZE");
+                    reply(" UTF8");
+                    reply("211 End");
+                } else if ("MLSD".equals(cmd) || "LIST".equals(cmd)) {
+                    if ("MLSD".equals(cmd) && (!supportMlsd || brokenMlsd)) {
+                        reply("500 Unknown command");
+                        continue;
+                    }
+                    list(arg, "MLSD".equals(cmd));
                 } else {
                     reply("502 Not implemented");
                 }
+            }
+        }
+
+        void list(String path, boolean mlsd) throws Exception {
+            String dir = path.length() > 1 && path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+            String prefix = dir.equals("/") ? "/" : dir + "/";
+            java.util.TreeSet<String> names = new java.util.TreeSet<String>();
+            java.util.Set<String> dirs = new java.util.HashSet<String>();
+            java.util.List<String> all = new ArrayList<String>(files.keySet());
+            all.addAll(directories);
+            boolean exists = dir.equals("/");
+            for (String f : all) {
+                if (!f.startsWith(prefix) || f.length() == prefix.length()) continue;
+                exists = true;
+                String rest = f.substring(prefix.length());
+                int slash = rest.indexOf('/');
+                String n = slash >= 0 ? rest.substring(0, slash) : rest;
+                names.add(n);
+                if (slash >= 0 || directories.contains(f)) dirs.add(n);
+            }
+            if (!exists) {
+                reply("550 No such directory");
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            if (mlsd) sb.append("type=cdir;modify=20260101000000; .\r\ntype=pdir;modify=20260101000000; ..\r\n");
+            else if ("unix".equals(listStyle)) sb.append("total 8\r\n");
+            for (String n : names) {
+                byte[] f = files.get(prefix + n);
+                boolean d = dirs.contains(n);
+                long size = f == null ? 0 : f.length;
+                if (mlsd) {
+                    sb.append(d ? "type=dir;" : "type=file;size=" + size + ";").append("modify=20260102030405;UNIX.mode=0644; ").append(n).append("\r\n");
+                } else if ("unix".equals(listStyle)) {
+                    sb.append(d ? "drwxr-xr-x" : "-rw-r--r--").append("    1 ftp      ftp      ").append(d ? 4096 : size)
+                            .append(" Jan 02  2026 ").append(n).append("\r\n");
+                } else {
+                    sb.append("01-02-26  03:04PM       ").append(d ? "<DIR>         " : String.valueOf(size)).append(" ").append(n).append("\r\n");
+                }
+            }
+            sendData(sb.toString().getBytes("UTF-8"));
+        }
+
+        void sendData(byte[] body) throws Exception {
+            if (passive == null) {
+                reply("425 Use PASV first");
+                return;
+            }
+            Socket d = passive.accept();
+            passive.close();
+            passive = null;
+            try {
+                reply("150 Here comes the listing");
+                SSLSocket dataTls = null;
+                OutputStream dout = d.getOutputStream();
+                if (protP) {
+                    dataTls = serverTls(d);
+                    dout = dataTls.getOutputStream();
+                }
+                dout.write(body);
+                dout.flush();
+                if (dataTls != null) dataTls.close(); else d.close();
+                reply("226 Directory send OK");
+            } finally {
+                d.close();
             }
         }
 

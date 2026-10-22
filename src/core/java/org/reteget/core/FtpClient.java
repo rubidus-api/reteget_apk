@@ -60,10 +60,13 @@ final class FtpClient {
     private static final class Reply {
         final int code;
         final String text;
+        /** Every line of a multi-line reply (FEAT). */
+        final String all;
 
-        Reply(int code, String text) {
+        Reply(int code, String text, String all) {
             this.code = code;
             this.text = text;
+            this.all = all;
         }
 
         @Override
@@ -97,6 +100,8 @@ final class FtpClient {
     private volatile boolean aborted;
     private boolean epsvRefused;
     private Boolean dataResumed;
+    /** Whether the server lists with MLSD (RFC 3659), known after the first listing. */
+    private Boolean mlsd;
 
     /**
      * @param scheme one of {@link #FTP}, {@link #FTPES}, {@link #FTPS}
@@ -262,6 +267,70 @@ final class FtpClient {
         }
     }
 
+    /** A folder listing as the server sent it, and how to read it. */
+    static final class Listing {
+        final String text;
+        final boolean mlsd;
+
+        Listing(String text, boolean mlsd) {
+            this.text = text;
+            this.mlsd = mlsd;
+        }
+    }
+
+    /** Lists folder {@code path}: MLSD where FEAT offers it (MLST), LIST otherwise; at most {@code maxBytes}. */
+    Listing list(String path, int maxBytes) throws IOException {
+        if (mlsd == null) {
+            Reply f = command("FEAT");
+            mlsd = Boolean.valueOf(f.code == 211 && f.all.toUpperCase(java.util.Locale.US).contains("MLST"));
+        }
+        while (true) {
+            boolean useMlsd = mlsd.booleanValue();
+            Socket d = openData();
+            data = d;
+            try {
+                Reply r = command((useMlsd ? "MLSD " : "LIST ") + path);
+                if (useMlsd && (r.code == 500 || r.code == 501 || r.code == 502)) {
+                    mlsd = Boolean.FALSE; // FEAT promised more than the server does
+                    continue;
+                }
+                if (r.code != 150 && r.code != 125) {
+                    throw new IOException(r.code == 550 ? "The server cannot list this folder (" + r + ")" : "Listing failed: " + r);
+                }
+                InputStream din;
+                TlsConnection dataTls = null;
+                if (tls) {
+                    try {
+                        dataTls = tls13 ? Tls13Socket.over(d, asciiHost, policy, controlTls.session(), false, false)
+                                : Tls12Socket.over(d, asciiHost, policy, controlTls.session(), false);
+                    } catch (IOException e) {
+                        if (aborted) throw e;
+                        throw new IOException("TLS on the data connection failed: " + e.getMessage() + afterFailure());
+                    }
+                    dataResumed = Boolean.valueOf(dataTls.wasResumed());
+                    din = dataTls.getInputStream();
+                } else {
+                    din = d.getInputStream();
+                }
+                ByteArrayOutputStream b = new ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = din.read(buf)) != -1) {
+                    b.write(buf, 0, n);
+                    if (b.size() > maxBytes) throw new IOException("The folder listing is larger than " + (maxBytes >> 20) + " MB");
+                }
+                closeQuietly(d);
+                data = null;
+                r = readReply();
+                if (r.code != 226 && r.code != 250) throw new IOException("The listing did not complete: " + r);
+                return new Listing(b.toString("UTF-8"), useMlsd);
+            } finally {
+                closeQuietly(d);
+                data = null;
+            }
+        }
+    }
+
     /** What the server says on the control connection after the data connection failed, if anything. */
     private String afterFailure() {
         try {
@@ -360,15 +429,17 @@ final class FtpClient {
         } catch (NumberFormatException e) {
             throw new IOException("Not an FTP reply: " + printable(line));
         }
+        StringBuilder all = new StringBuilder(line);
         if (line.length() > 3 && line.charAt(3) == '-') {
             String end = line.substring(0, 3) + " ";
             for (int i = 0; ; i++) {
                 if (i >= MAX_REPLY_LINES) throw new IOException("The FTP reply is too long");
                 line = readLine();
+                all.append('\n').append(line);
                 if (line.startsWith(end)) break;
             }
         }
-        return new Reply(code, printable(line));
+        return new Reply(code, printable(line), all.toString());
     }
 
     private String readLine() throws IOException {

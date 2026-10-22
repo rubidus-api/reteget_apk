@@ -68,6 +68,9 @@ public class TestRunner {
         FtpEngineTests.run();
         passed += FtpEngineTests.passed;
         failed += FtpEngineTests.failed;
+        ListingTests.run();
+        passed += ListingTests.passed;
+        failed += ListingTests.failed;
 
         System.out.println("\n-------------------------------------------");
         System.out.println("Test Results: " + passed + " passed, " + failed + " failed.");

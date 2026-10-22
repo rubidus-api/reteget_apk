@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 public final class IndexMatcher {
 
     private static final Pattern TOKEN = Pattern.compile("\\{([A-Za-z0-9_]+)\\}|\\*");
-    private static final Pattern LINK = Pattern.compile(
+    static final Pattern LINK = Pattern.compile(
             "(?:href|src)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", Pattern.CASE_INSENSITIVE);
     /** What may follow the end of an address in running text. */
     private static final String END = "(?=$|[\\s\"'<>)\\],;])";

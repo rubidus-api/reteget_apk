@@ -715,6 +715,312 @@ public class DownloadEngine {
         }
     }
 
+    // --- Folder listings (RFC-0005) ---
+
+    /** Largest listing read (FTP data, HTTP body). */
+    static final int MAX_LISTING_BYTES = 4 * 1024 * 1024;
+
+    /**
+     * The entries of the folder at {@code folderUrl} (a trailing '/' is added when missing):
+     * SFTP, FTP/FTPS (MLSD or LIST), or http(s) through WebDAV PROPFIND and else the HTML index
+     * page. Questions (host keys, certificates, passphrases, https to http) come up as
+     * {@link UserQuestion} exceptions, as in a download. Runs on the calling thread; {@link #cancel}
+     * stops it.
+     */
+    public List<RemoteEntry> list(String folderUrl, boolean insecure, String sshKey) throws IOException {
+        credentials = null;
+        cleartextNoticeSent = true; // no notices for a listing
+        String url = Listings.asFolder(folderUrl.trim());
+        String lower = url.toLowerCase(Locale.US);
+        try {
+            if (lower.startsWith("sftp://")) return listSftp(url, sshKey);
+            if (lower.startsWith("ftp://") || lower.startsWith("ftpes://") || lower.startsWith("ftps://")) return listFtp(url);
+            if (lower.startsWith("http://") || lower.startsWith("https://")) return listHttp(url, insecure);
+            throw new IOException("Folders can be listed over sftp, ftp, ftpes, ftps, http and https");
+        } catch (IOException e) {
+            if (cancelled) throw new CancelledException();
+            throw e;
+        }
+    }
+
+    private List<RemoteEntry> listSftp(String url, String sshKey) throws IOException {
+        URI uri;
+        try {
+            uri = new URI(url);
+        } catch (java.net.URISyntaxException e) {
+            throw new IOException("Invalid SFTP URL");
+        }
+        String host = uri.getHost();
+        if (host == null || host.length() == 0) throw new IOException("Invalid SFTP URL: no host");
+        int port = uri.getPort() > 0 ? uri.getPort() : SftpSession.DEFAULT_PORT;
+        HttpAuth.Credentials c = HttpAuth.credentials(uri.getRawUserInfo());
+        if (c == null || c.user.length() == 0) {
+            throw new IOException("An sftp:// address needs a user name, as in sftp://user:password@host/path");
+        }
+        String password = uri.getRawUserInfo().indexOf(':') >= 0 ? c.password : null;
+        String path = SftpSession.remotePath(HttpAuth.percentDecode(uri.getRawPath() == null ? "/" : uri.getRawPath()));
+        String hostPort = KnownHosts.hostPort(host, port);
+        KnownHosts hosts = SshConfig.knownHosts();
+        SshIdentity identity = sshKey == null || sshKey.length() == 0 ? null : SshConfig.keys().identity(sshKey);
+        SftpSession session = SftpSession.create();
+        activeSftp = session;
+        try {
+            checkCancelled();
+            session.connect(host, port, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, c.user, password, identity,
+                    hosts.checkFor(hostPort), hosts.keyTypeFor(hostPort));
+            lastTlsSummary = session.summary();
+            List<RemoteEntry> out = new ArrayList<RemoteEntry>();
+            for (SftpSession.DirEntry e : session.list(path, Listings.MAX_ENTRIES)) {
+                if (!Listings.usableName(e.name)) continue;
+                out.add(new RemoteEntry(e.name, e.directory, e.directory ? -1 : e.size,
+                        e.mtime > 0 ? e.mtime * 1000 : 0, Listings.child(url, e.name, e.directory)));
+            }
+            session.close();
+            return out;
+        } finally {
+            session.abort();
+            activeSftp = null;
+        }
+    }
+
+    private List<RemoteEntry> listFtp(String url) throws IOException {
+        URI uri;
+        try {
+            uri = new URI(url);
+        } catch (java.net.URISyntaxException e) {
+            throw new IOException("Invalid FTP URL");
+        }
+        String scheme = uri.getScheme().toLowerCase(Locale.US);
+        String host = uri.getHost();
+        if (host == null || host.length() == 0) throw new IOException("Invalid FTP URL: no host");
+        int port = uri.getPort() > 0 ? uri.getPort() : FtpClient.defaultPort(scheme);
+        HttpAuth.Credentials c = HttpAuth.credentials(uri.getRawUserInfo());
+        String user = c == null ? "anonymous" : c.user;
+        String password = c == null ? "anonymous@reteget.org" : c.password;
+        String path = HttpAuth.percentDecode(uri.getRawPath() == null || uri.getRawPath().length() == 0 ? "/" : uri.getRawPath());
+        boolean tls = !FtpClient.FTP.equals(scheme);
+        String hostPort = TlsPins.hostPort(host, port);
+        org.reteget.core.tls.CertificatePolicy policy = null;
+        if (tls) {
+            X509TrustManager tm = ftpsTrustManagerForTest != null ? ftpsTrustManagerForTest : TlsHelper.getTrustManager(false);
+            policy = TlsPins.get().policyFor(hostPort, tm);
+        }
+        FtpClient ftp = new FtpClient(scheme, host, port, user, password, policy);
+        activeFtp = ftp;
+        try {
+            checkCancelled();
+            try {
+                ftp.connect(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS);
+            } catch (IOException e) {
+                throw tls ? TlsPins.get().question(hostPort, e) : e;
+            }
+            lastTlsSummary = ftp.summary();
+            FtpClient.Listing l = ftp.list(path, MAX_LISTING_BYTES);
+            ftp.close();
+            return l.mlsd ? Listings.parseMlsd(l.text, url) : Listings.parseList(l.text, url, System.currentTimeMillis());
+        } finally {
+            ftp.abort();
+            activeFtp = null;
+        }
+    }
+
+    private List<RemoteEntry> listHttp(String url, boolean insecure) throws IOException {
+        URL entered = new URL(url);
+        credentials = HttpAuth.credentials(entered);
+        URL start = HttpAuth.withoutUserInfo(entered);
+        credentialOrigin = HttpAuth.origin(start);
+        String userInfo = entered.getUserInfo();
+        Fetched dav = fetch(start, "PROPFIND", Listings.PROPFIND_BODY, insecure);
+        if (dav.code == 207) {
+            return Listings.parseDav(dav.text(), withUserInfo(dav.url, userInfo));
+        }
+        Fetched page = dav.code >= 200 && dav.code < 300 && dav.looksLikeHtml() ? dav : fetch(start, "GET", null, insecure);
+        if (page.code < 200 || page.code >= 300) {
+            throw new IOException("HTTP server returned error: " + page.status);
+        }
+        return Listings.parseHtmlIndex(page.text(), withUserInfo(page.url, userInfo));
+    }
+
+    /** The folder address a listing's entries are built on: where the redirects led, with the user info back. */
+    private static String withUserInfo(URL url, String userInfo) {
+        String s = Listings.asFolder(url.toString());
+        if (userInfo == null || userInfo.length() == 0) return s;
+        int scheme = s.indexOf("://");
+        return s.substring(0, scheme + 3) + userInfo + "@" + s.substring(scheme + 3);
+    }
+
+    /** A small HTTP response read whole. */
+    static final class Fetched {
+        int code;
+        String status;
+        URL url;
+        String contentType;
+        byte[] body;
+
+        String text() throws java.io.UnsupportedEncodingException {
+            return new String(body, "UTF-8");
+        }
+
+        boolean looksLikeHtml() {
+            return contentType != null && contentType.toLowerCase(Locale.US).contains("html");
+        }
+    }
+
+    /**
+     * One request over the engine's own socket code (HttpURLConnection refuses PROPFIND), with
+     * redirects (https to http only when allowed) and Basic/Digest as for downloads.
+     */
+    private Fetched fetch(URL start, String method, String body, boolean insecure) throws IOException {
+        URL url = start;
+        int redirects = 0;
+        String authorization = null;
+        while (true) {
+            checkCancelled();
+            String host = url.getHost();
+            boolean isHttps = url.getProtocol().equalsIgnoreCase("https");
+            int port = url.getPort() >= 0 ? url.getPort() : url.getDefaultPort();
+            TlsConnection tls = null;
+            Socket plain = null;
+            try {
+                InputStream sockIn;
+                OutputStream sockOut;
+                if (isHttps) {
+                    X509TrustManager tm = TlsHelper.getTrustManager(insecure);
+                    tls = TlsClient.connect(host, port, READ_TIMEOUT_MS, insecure ? null : tm);
+                    activeTlsConnection = tls;
+                    lastTlsSummary = tls.getSummary();
+                    sockIn = tls.getInputStream();
+                    sockOut = tls.getOutputStream();
+                } else {
+                    plain = new Socket();
+                    activePlainSocket = plain;
+                    plain.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
+                    plain.setSoTimeout(READ_TIMEOUT_MS);
+                    sockIn = plain.getInputStream();
+                    sockOut = plain.getOutputStream();
+                }
+                checkCancelled();
+                byte[] payload = body == null ? null : body.getBytes("UTF-8");
+                StringBuilder req = new StringBuilder();
+                req.append(method).append(' ').append(HttpAuth.requestTarget(url)).append(" HTTP/1.1\r\n");
+                req.append("Host: ").append(host);
+                if (url.getPort() >= 0 && url.getPort() != url.getDefaultPort()) req.append(':').append(url.getPort());
+                req.append("\r\n");
+                req.append("User-Agent: ").append(userAgent()).append("\r\n");
+                req.append("Accept-Encoding: identity\r\n");
+                if ("PROPFIND".equals(method)) req.append("Depth: 1\r\n");
+                if (payload != null) {
+                    req.append("Content-Type: application/xml; charset=utf-8\r\n");
+                    req.append("Content-Length: ").append(payload.length).append("\r\n");
+                }
+                if (authorization != null) req.append("Authorization: ").append(authorization).append("\r\n");
+                req.append("Connection: close\r\n\r\n");
+                sockOut.write(req.toString().getBytes("UTF-8"));
+                if (payload != null) sockOut.write(payload);
+                sockOut.flush();
+
+                InputStream in = new BufferedInputStream(sockIn, 16384);
+                String statusLine = readLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    throw new IOException("Invalid HTTP response from server: " + statusLine);
+                }
+                String[] parts = statusLine.split(" ");
+                int code;
+                try {
+                    code = Integer.parseInt(parts.length > 1 ? parts[1] : "");
+                } catch (NumberFormatException e) {
+                    throw new IOException("Invalid HTTP status line: " + statusLine);
+                }
+                Map<String, String> headers = new HashMap<String, String>();
+                List<String> challenges = new ArrayList<String>();
+                String headerLine;
+                while ((headerLine = readLine(in)) != null && !headerLine.isEmpty()) {
+                    int colon = headerLine.indexOf(':');
+                    if (colon > 0) {
+                        String key = headerLine.substring(0, colon).trim().toLowerCase(Locale.US);
+                        String val = headerLine.substring(colon + 1).trim();
+                        headers.put(key, val);
+                        if (key.equals("www-authenticate")) challenges.add(val);
+                    }
+                }
+                if (isRedirect(code)) {
+                    url = nextHop(url, headers.get("location"), code, ++redirects);
+                    authorization = null;
+                    if (code == 303) {
+                        method = "GET";
+                        body = null;
+                    }
+                    continue;
+                }
+                if (code == 401) {
+                    authorization = authorize(url, challenges, authorization);
+                    continue;
+                }
+                Fetched f = new Fetched();
+                f.code = code;
+                f.status = statusLine;
+                f.url = url;
+                f.contentType = headers.get("content-type");
+                ByteArrayOutputStream b = new ByteArrayOutputStream();
+                boolean chunked = headers.containsKey("transfer-encoding")
+                        && headers.get("transfer-encoding").toLowerCase(Locale.US).contains("chunked");
+                long length = chunked ? -1 : parseLong(headers.get("content-length"));
+                if (length > MAX_LISTING_BYTES) throw new IOException("The folder listing is larger than 4 MB");
+                if (chunked) {
+                    readChunked(in, b);
+                } else {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((length < 0 || b.size() < length) && (n = in.read(buf, 0,
+                            length < 0 ? buf.length : (int) Math.min(buf.length, length - b.size()))) != -1) {
+                        b.write(buf, 0, n);
+                        if (b.size() > MAX_LISTING_BYTES) throw new IOException("The folder listing is larger than 4 MB");
+                    }
+                }
+                f.body = b.toByteArray();
+                return f;
+            } finally {
+                if (tls != null) {
+                    try { tls.close(); } catch (Exception ignored) {}
+                }
+                if (plain != null) {
+                    try { plain.close(); } catch (Exception ignored) {}
+                }
+                activeTlsConnection = null;
+                activePlainSocket = null;
+            }
+        }
+    }
+
+    private void readChunked(InputStream in, ByteArrayOutputStream b) throws IOException {
+        byte[] buf = new byte[16384];
+        while (true) {
+            checkCancelled();
+            String h = readLine(in);
+            if (h == null) throw new EOFException("The listing ended without its final chunk");
+            h = h.trim();
+            if (h.isEmpty()) continue;
+            int semi = h.indexOf(';');
+            if (semi > 0) h = h.substring(0, semi).trim();
+            int size;
+            try {
+                size = Integer.parseInt(h, 16);
+            } catch (NumberFormatException e) {
+                throw new IOException("Invalid chunk size: " + h);
+            }
+            if (size == 0) return;
+            if (size < 0 || b.size() + (long) size > MAX_LISTING_BYTES) throw new IOException("The folder listing is larger than 4 MB");
+            int rem = size;
+            while (rem > 0) {
+                int n = in.read(buf, 0, Math.min(rem, buf.length));
+                if (n == -1) throw new EOFException("Premature EOF in chunked body");
+                b.write(buf, 0, n);
+                rem -= n;
+            }
+            readLine(in);
+        }
+    }
+
     // --- Shared steps ---
 
     private static boolean isRedirect(int code) {
