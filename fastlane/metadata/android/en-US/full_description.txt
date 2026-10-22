@@ -14,6 +14,8 @@ Features
 * HTTP, HTTPS, passive FTP, FTPS (ftpes://, ftps://) and SFTP.
 * FTPS with its own TLS, reusing the TLS session on the data connection as servers require; a self-signed certificate is confirmed by fingerprint once and then pinned.
 * SFTP with its own SSH-2 client (works on Android 2.3): the server's host key fingerprint is confirmed on first use and a changed key is refused; log in with a password or with a key generated on the phone or imported from OpenSSH (Ed25519, RSA), chosen per address or preset. Keys with a passphrase stay encrypted on the phone.
+* Browse server folders over SFTP, FTP, FTPS and http(s) (WebDAV or an index page): check files and folders and download them, folders with their subfolders.
+* An https download that the server redirects to plain http stops and asks first.
 * Broken HTTP downloads continue where they stopped (Range with If-Range): automatically up to three times, and with Retry, also after the app was closed.
 * Password-protected servers: http://user:password@host/path, answered with Digest (SHA-256, MD5) or Basic only when the server asks, and only to that address. Passwords are shown as *** and left out of settings exports.
 * Settings export and import (presets, options, signing keys) as a plain text file in the subset of INI and TOML that both read the same way, or through the clipboard.

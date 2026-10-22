@@ -101,6 +101,15 @@ public final class Listings {
         out.add(new RemoteEntry(name, dir, dir ? -1 : size, modified, child(folderUrl, name, dir)));
     }
 
+    /** The files of a listing as an index page for {@link IndexMatcher}: Latest on a folder. */
+    public static String asIndexPage(List<RemoteEntry> entries) {
+        StringBuilder page = new StringBuilder();
+        for (RemoteEntry e : entries) {
+            if (!e.directory) page.append("<a href=\"").append(e.url.replace("\"", "%22")).append("\"></a>\n");
+        }
+        return page.toString();
+    }
+
     // --- FTP ---
 
     private static final Pattern MLSD_TIME = Pattern.compile("(\\d{14})");

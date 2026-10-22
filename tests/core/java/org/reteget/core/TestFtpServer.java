@@ -113,8 +113,8 @@ public final class TestFtpServer implements Runnable {
         s.password = args[3];
         for (int i = 4; i < args.length; i++) {
             File f = new File(args[i]);
-            s.files.put("/pub/" + f.getName(), java.nio.file.Files.readAllBytes(f.toPath()));
-            s.mdtm.put("/pub/" + f.getName(), "20260101000000");
+            org.reteget.core.ssh.TestSshServer.addTree(s.files, s.directories, "/pub/", f);
+            if (f.isFile()) s.mdtm.put("/pub/" + f.getName(), "20260101000000");
         }
         s.start("-".equals(args[2]) ? null : new File(args[2]));
         System.out.println("listening on 127.0.0.1:" + s.port() + " (" + s.mode + ")");

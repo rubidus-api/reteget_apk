@@ -1351,6 +1351,11 @@ public class DownloadEngine {
         return "download_" + System.currentTimeMillis() + ".apk";
     }
 
+    /** {@code name} made safe as a local file or folder name (the rules downloads use). */
+    public static String safeFileName(String name) {
+        return sanitizeFilename(name);
+    }
+
     private static String sanitizeFilename(String fn) {
         return fn.replaceAll("[\\\\/:*?\"<>|]", "_");
     }

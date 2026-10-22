@@ -106,13 +106,23 @@ public final class TestSshServer implements Runnable {
         ss = new ServerSocket(port, 50, InetAddress.getByName("127.0.0.1"));
     }
 
-    /** TestSshServer <port> <password> <file to serve as /pub/NAME>...: user "user", runs until killed. */
+    /** A file as {@code prefix}NAME, a folder with everything under it (empty folders included). */
+    public static void addTree(Map<String, byte[]> files, List<String> dirs, String prefix, java.io.File f) throws IOException {
+        if (f.isDirectory()) {
+            dirs.add(prefix + f.getName());
+            java.io.File[] children = f.listFiles();
+            if (children != null) for (java.io.File c : children) addTree(files, dirs, prefix + f.getName() + "/", c);
+        } else {
+            files.put(prefix + f.getName(), java.nio.file.Files.readAllBytes(f.toPath()));
+        }
+    }
+
+    /** TestSshServer <port> <password> <file or folder to serve under /pub/>...: user "user", runs until killed. */
     public static void main(String[] args) throws Exception {
         TestSshServer s = new TestSshServer(Integer.parseInt(args[0]));
         s.password = args[1];
         for (int i = 2; i < args.length; i++) {
-            java.io.File f = new java.io.File(args[i]);
-            s.files.put("/pub/" + f.getName(), java.nio.file.Files.readAllBytes(f.toPath()));
+            addTree(s.files, s.directories, "/pub/", new java.io.File(args[i]));
         }
         s.start();
         System.out.println("listening on 127.0.0.1:" + s.port() + ", host key " + SshHostKey.fingerprint(s.hostKeyBlob()));

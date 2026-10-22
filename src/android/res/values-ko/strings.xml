@@ -168,7 +168,7 @@
     <string name="install_failed">%1$s을(를) 설치하지 못했습니다: %2$s</string>
     <string name="btn_latest">Latest</string>
     <string name="dialog_edit_preset_index_label">찾아볼 페이지 (선택):</string>
-    <string name="dialog_edit_preset_index_hint">다운로드 목록이 있는 페이지. 이때 위 주소는 패턴이 되며 {1}은 버전, *는 아무 글자</string>
+    <string name="dialog_edit_preset_index_hint">다운로드 목록이 있는 페이지나 sftp/ftp 폴더. 이때 위 주소는 패턴이 되며 {1}은 버전, *는 아무 글자</string>
     <string name="latest_looking">가장 새 %1$s 찾는 중…</string>
     <string name="latest_found">가장 새 것: %1$s — 큐에 넣었습니다</string>
     <string name="latest_none">%1$s에서 프리셋 주소에 맞는 것이 없습니다</string>
@@ -203,4 +203,18 @@
     <string name="redirect_msg">%1$s이(가) 이 https 다운로드를 암호화되지 않은 주소로 넘깁니다:\n\n%2$s\n\n그쪽으로 가는 동안 같은 네트워크의 누구든 파일을 읽거나 바꿀 수 있습니다. 이 주소를 믿을 때만 계속하고, 받은 뒤에 체크섬이나 APK 서명을 확인하세요.</string>
     <string name="redirect_btn_continue">http로 계속</string>
     <string name="redirect_wait">대기 중: http로 가는 리다이렉트 확인 (%1$s)</string>
+    <string name="btn_browse">탐색</string>
+    <string name="browse_title">폴더</string>
+    <string name="browse_reading">%1$s 읽는 중…</string>
+    <string name="browse_failed">폴더 목록을 읽지 못했습니다: %1$s</string>
+    <string name="browse_empty">빈 폴더입니다.</string>
+    <string name="browse_download">받기 (%1$d)</string>
+    <string name="browse_close">닫기</string>
+    <string name="browse_up">위로</string>
+    <string name="browse_walking">폴더를 살펴보는 중… 지금까지 파일 %1$d개</string>
+    <string name="browse_too_many">한 번에 받기에는 너무 많습니다: %1$s. 더 작은 폴더를 고르세요.</string>
+    <string name="browse_nothing">고른 폴더에 파일이 없습니다.</string>
+    <string name="browse_confirm">파일 %1$d개, 모두 %2$s를 받을까요? 폴더 구조는 서버와 같게 Download 폴더 안에 만듭니다.</string>
+    <string name="browse_confirm_unknown">파일 %1$d개는 크기를 모릅니다.</string>
+    <string name="browse_queued">파일 %1$d개를 큐에 넣었습니다</string>
 </resources>

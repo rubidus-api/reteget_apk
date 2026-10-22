@@ -49,6 +49,7 @@ public final class ListingTests {
             testWindowsList();
             testDav();
             testHtmlIndex();
+            testLatestOnFolder();
             testWalker();
             testFtpWire();
             testSftpWire();
@@ -166,6 +167,15 @@ public final class ListingTests {
                 + "<d:getcontentlength>10</d:getcontentlength></d:prop></d:propstat></d:response></d:multistatus>";
         l = Listings.parseDav(nextcloud, "https://cloud/remote.php/dav/files/me/Apps/");
         checkEq("dav nextcloud: Korean name", "한글.apk", names(l));
+    }
+
+    private static void testLatestOnFolder() throws IOException {
+        String folder = "sftp://me:pw@nas/apk/";
+        List<RemoteEntry> l = Arrays.asList(file(folder, "app-0.9.apk", 1), file(folder, "app-0.10.apk", 1),
+                dir(folder, "app-9.9.apk"), file(folder, "other-1.0.apk", 1), file(folder, "app 1.0.apk", 1));
+        IndexMatcher.Match m = IndexMatcher.latest(Listings.asIndexPage(l), folder, "sftp://me:pw@nas/apk/app-{1}.apk");
+        checkEq("latest on a folder: newest file, folders left out", "sftp://me:pw@nas/apk/app-0.10.apk", m == null ? null : m.url);
+        checkEq("latest on a folder: version", "0.10", m == null ? null : m.version);
     }
 
     private static void testHtmlIndex() throws IOException {

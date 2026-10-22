@@ -168,7 +168,7 @@
     <string name="install_failed">Could not install %1$s: %2$s</string>
     <string name="btn_latest">Latest</string>
     <string name="dialog_edit_preset_index_label">Index page (optional):</string>
-    <string name="dialog_edit_preset_index_hint">Page listing the downloads; the URL above is then the pattern, where {1} is the version and * any text</string>
+    <string name="dialog_edit_preset_index_hint">Page or sftp/ftp folder listing the downloads; the URL above is then the pattern, where {1} is the version and * any text</string>
     <string name="latest_looking">Looking for the newest %1$s…</string>
     <string name="latest_found">Newest: %1$s — added to the queue</string>
     <string name="latest_none">Nothing on %1$s fits the preset URL</string>
@@ -203,4 +203,18 @@
     <string name="redirect_msg">%1$s sends this https download on to an address without encryption:\n\n%2$s\n\nOn the way there the file can be read and changed by anyone on the network. Continue only if you trust this address, and check the checksum or the APK signature afterwards.</string>
     <string name="redirect_btn_continue">Continue over http</string>
     <string name="redirect_wait">Waiting: confirm the redirect to http (%1$s)</string>
+    <string name="btn_browse">Browse</string>
+    <string name="browse_title">Folder</string>
+    <string name="browse_reading">Reading %1$s…</string>
+    <string name="browse_failed">Could not list the folder: %1$s</string>
+    <string name="browse_empty">This folder is empty.</string>
+    <string name="browse_download">Download (%1$d)</string>
+    <string name="browse_close">Close</string>
+    <string name="browse_up">Up</string>
+    <string name="browse_walking">Looking through the folders… %1$d files so far</string>
+    <string name="browse_too_many">Too much to download at once: %1$s. Choose smaller folders.</string>
+    <string name="browse_nothing">The chosen folders contain no files.</string>
+    <string name="browse_confirm">Download %1$d files, %2$s in all? Folders are kept as they are on the server, inside the Download folder.</string>
+    <string name="browse_confirm_unknown">The size of %1$d files is not known.</string>
+    <string name="browse_queued">%1$d files added to the queue</string>
 </resources>

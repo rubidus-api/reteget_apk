@@ -99,6 +99,13 @@
                 android:textColor="#333333" />
 
             <Button
+                android:id="@+id/btn_browse"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="4dp"
+                android:text="@string/btn_browse" />
+
+            <Button
                 android:id="@+id/btn_paste_url"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

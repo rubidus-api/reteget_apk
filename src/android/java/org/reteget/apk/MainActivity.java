@@ -34,6 +34,10 @@ import org.reteget.core.DownloadEngine;
 import org.reteget.core.DownloadQueue;
 import org.reteget.core.DownloadTask;
 import org.reteget.core.RedirectQuestion;
+import org.reteget.core.RemoteEntry;
+import org.reteget.core.UserQuestion;
+import org.reteget.core.RemoteWalker;
+import org.reteget.core.Listings;
 import org.reteget.core.HttpAuth;
 import org.reteget.core.IndexMatcher;
 import org.reteget.core.PresetItem;
@@ -93,6 +97,7 @@ public class MainActivity extends Activity {
     private SshUi sshUi;
     /** The key chosen for the sftp:// address in the URL bar; empty for password only. */
     private String selectedSshKey = "";
+    private BrowseUi browseUi;
     private View layoutSshKey;
     private Button btnSshKey;
     /** Questions (entry id and question) already put to the user in this run, so each pops up once. */
@@ -310,6 +315,23 @@ public class MainActivity extends Activity {
         btnAddPreset = (Button) findViewById(R.id.btn_add_preset);
         SshUi.init(this);
         sshUi = new SshUi(this);
+        browseUi = new BrowseUi(this, sshUi, new BrowseUi.Host() {
+            public boolean insecure() {
+                return chkInsecureSsl.isChecked();
+            }
+
+            public String sshKey() {
+                return selectedSshKey;
+            }
+
+            public void queue(final List<RemoteWalker.Planned> files) {
+                withStoragePermission(new Runnable() {
+                    public void run() {
+                        queueBrowsed(files);
+                    }
+                });
+            }
+        });
         layoutSshKey = findViewById(R.id.layout_ssh_key);
         btnSshKey = (Button) findViewById(R.id.btn_ssh_key);
         btnSshKey.setOnClickListener(new View.OnClickListener() {
@@ -784,6 +806,12 @@ public class MainActivity extends Activity {
     }
 
     private void setupUrlButtons() {
+        findViewById(R.id.btn_browse).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                browseUi.open(getFinalDownloadUrl());
+            }
+        });
         findViewById(R.id.btn_paste_url).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -1284,6 +1312,10 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (url.endsWith("/") && !lower.startsWith("http")) { // a folder: show it instead
+            browseUi.open(url);
+            return;
+        }
         final File destDir = chooseDownloadDir();
 
         String template = currentTemplate != null && !currentTemplate.getPlaceholders().isEmpty()
@@ -1311,6 +1343,10 @@ public class MainActivity extends Activity {
      */
     private void downloadLatest(final PresetItem item) {
         final String index = item.index.trim();
+        if (!index.toLowerCase().startsWith("http")) {
+            latestFromFolder(item, index);
+            return;
+        }
         final File dir = new File(getCacheDir(), "index-" + System.currentTimeMillis());
         dir.mkdirs();
         Toast.makeText(this, getString(R.string.latest_looking, item.getDisplayName()), Toast.LENGTH_SHORT).show();
@@ -1365,6 +1401,44 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    /** Latest on an sftp/ftp folder: its listing stands in for an index page. */
+    private void latestFromFolder(final PresetItem item, final String index) {
+        Toast.makeText(this, getString(R.string.latest_looking, item.getDisplayName()), Toast.LENGTH_SHORT).show();
+        final boolean insecure = chkInsecureSsl.isChecked();
+        new Thread(new Runnable() {
+            public void run() {
+                IndexMatcher.Match found = null;
+                Exception error = null;
+                try {
+                    List<RemoteEntry> entries = new DownloadEngine().list(index, insecure, isSftp(index) ? item.sshKey : null);
+                    found = IndexMatcher.latest(Listings.asIndexPage(entries), Listings.asFolder(index), item.url);
+                } catch (Exception e) {
+                    error = e;
+                }
+                final IndexMatcher.Match m = found;
+                final Exception err = error;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (isFinishing()) return;
+                        if (err instanceof UserQuestion) {
+                            DownloadTask q = new DownloadTask(-1, "", "", false, false, "", 0);
+                            q.state = DownloadTask.State.FAILED;
+                            q.ask = ((UserQuestion) err).token();
+                            sshUi.answer(q, new Runnable() {
+                                public void run() {
+                                    latestFromFolder(item, index);
+                                }
+                            });
+                        } else {
+                            finishLatest(item, index, m, err == null ? null
+                                    : HttpAuth.mask(err.getMessage() != null ? err.getMessage() : err.toString()));
+                        }
+                    }
+                });
+            }
+        }, "LatestFolder").start();
     }
 
     private void finishLatest(PresetItem item, String index, IndexMatcher.Match m, String error) {
@@ -1531,6 +1605,20 @@ public class MainActivity extends Activity {
                 });
             }
         }, "VerifyThread").start();
+    }
+
+    /** Files picked in a folder listing, each into the Download folder plus its subfolders. */
+    private void queueBrowsed(List<RemoteWalker.Planned> files) {
+        File base = chooseDownloadDir();
+        DownloadTask last = null;
+        for (RemoteWalker.Planned p : files) {
+            File dir = BrowseUi.target(base, p.subdir);
+            last = sQueue.enqueue(p.url, dir, chkInsecureSsl.isChecked(), chkPureTls.isChecked(), "", null, null,
+                    isSftp(p.url) ? selectedSshKey : null);
+        }
+        if (last != null) showStarted(last);
+        Toast.makeText(this, getString(R.string.browse_queued, files.size()), Toast.LENGTH_SHORT).show();
+        scrollView.smoothScrollTo(0, 0);
     }
 
     /**
